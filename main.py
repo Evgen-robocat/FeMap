@@ -1,33 +1,48 @@
 """
 main.py
-Статичная карта с центром на экваторе, Солнцем и зоной видимости (день/ночь)
+Пример использования всех слоёв карты с возможностью закомментировать ненужные
 """
 
+import matplotlib.pyplot as plt
 from datetime import datetime
-from graphics import render_map_static
-from utils import get_subsolar_position
+from config import CONFIG
+from graphics import draw_grid, draw_continents, draw_cities, draw_sun, draw_moon, draw_daylight
+from utils import get_subsolar_position, get_moon_position, load_continents_from_txt, load_cities_from_csv
 
-# --- Конфигурация ---
-CONFIG = {
-    "center_lat": 0,           # Экватор
-    "center_lon": 0,
-    "figsize": (6, 6),
-    "dpi": 200,
-    "output_file": "map_static.png",
-    "grid_step_lon": 30,
-    "special_latitudes": [66.5, 23.5, -23.5, -66.5],  # Полярные круги и тропики
-}
+# Создаём фигуру
+plt.style.use('dark_background')
+fig, ax = plt.subplots(figsize=CONFIG["figsize"], subplot_kw={'projection':'polar'})
+center_lat = CONFIG["center_lat"]
+center_lon = CONFIG["center_lon"]
+# --- Настройка осей ---
 
-# Время наблюдения
-dt = datetime(2025, 9, 7, 12, 0, 0)
+ax.set_theta_zero_location('S')
+ax.set_theta_direction(1)
+ax.set_ylim(0, 180)
+ax.set_xticks([])        # убираем подписи меридианов
+ax.set_yticks([])        # убираем подписи радиусов
+ax.grid(False)           # отключаем сетку matplotlib
+ax.spines['polar'].set_visible(False)  # убираем рамку
+# --- Сетка ---
+draw_grid(ax,center_lat, center_lon)
 
-# Получаем позицию Солнца
-sun_lat, sun_lon = get_subsolar_position(dt)
+# --- Линии берегов с файла ---
+draw_continents(ax, filename="data/coastline.txt",
+                center_lat=center_lat, center_lon=center_lon)
 
-# Подготовка объектов для отображения
-objects = [
-    {"lat": sun_lat, "lon": sun_lon, "marker": "*", "color": "orange", "label": "Солнце"},
-]
+# --- Города ---
+#cities = load_cities_from_csv(CONFIG["cities_file"])
+#draw_cities(ax, cities, center_lat, center_lon)
 
-# Отображаем карту
-render_map_static(CONFIG, objects, show_daylight=True)
+# --- Солнце и дневная зона ---
+#dt = datetime(2025, 9, 21, 12, 0, 0)
+#sun_lat, sun_lon = get_subsolar_position(dt)
+#draw_sun(ax, sun_lat, sun_lon, center_lat, center_lon)
+#draw_daylight(ax, sun_lat, sun_lon)
+
+# --- Луна ---
+# moon_lat, moon_lon = get_moon_position(dt)
+# draw_moon(ax, moon_lat, moon_lon, center_lat, center_lon)
+
+ax.set_title(CONFIG["title"])
+plt.show()
