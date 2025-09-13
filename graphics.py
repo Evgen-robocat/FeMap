@@ -122,7 +122,7 @@ def draw_sun(ax, sun_lat, sun_lon, center_lat, center_lon):
     """Рисует Солнце"""
     r, theta = transform_coordinates(sun_lat, sun_lon, center_lat, center_lon)
     ax.scatter(theta, r, marker='*', color='orange', s=80, label='Солнце', zorder=10)
-
+    ax.text(theta-0.2, r+0.3, "Sun", color='orange', fontsize=16)
 
 def draw_moon(ax, moon_lat, moon_lon, center_lat, center_lon):
     """Рисует Луну"""
@@ -130,19 +130,97 @@ def draw_moon(ax, moon_lat, moon_lon, center_lat, center_lon):
     ax.scatter(theta, r, marker='o', color='white', s=40, label='Луна', zorder=10)
 
 
-def draw_daylight(ax, sun_lat, sun_lon):
-    """Закрашивает дневную зону вокруг Солнца"""
-    theta_vals = np.linspace(0, 2*np.pi, 360)
-    r_vals = np.linspace(0, 180, 180)
-    Theta, R = np.meshgrid(theta_vals, r_vals)
-    lat_grid = 90 - R
-    lon_grid = np.degrees(Theta)
+def draw_daylight(ax, sun_lat, sun_lon, center_lat=90, center_lon=0):
+    """
+    Закрашивает дневную зону вокруг Солнца.
 
+    Логика:
+        1. Строим сетку координат Земли (широта/долгота).
+        2. Для каждой точки вычисляем угловое расстояние до Солнца.
+        3. Считаем точку "дневной", если угол < 90° (π/2).
+        4. Переводим координаты в проекцию (через transform_coordinates).
+        5. Рисуем закрашенную область pcolormesh.
+
+    :param ax: объект matplotlib.axes (с полярной проекцией)
+    :param sun_lat: широта Солнца (в градусах)
+    :param sun_lon: долгота Солнца (в градусах)
+    :param center_lat: широта центра карты
+    :param center_lon: долгота центра карты
+    """
+    import numpy as np
+    from utils import transform_coordinates
+
+    # --- 1. Сетка координат (каждые 2° для скорости)
+    lats = np.linspace(-90, 90, 181)
+    lons = np.linspace(-180, 180, 361)
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+
+    # --- 2. Угловое расстояние от точки к Солнцу (сферическая тригонометрия)
     angle = np.arccos(
         np.sin(np.radians(sun_lat)) * np.sin(np.radians(lat_grid)) +
         np.cos(np.radians(sun_lat)) * np.cos(np.radians(lat_grid)) *
         np.cos(np.radians(lon_grid - sun_lon))
     )
+
+    # --- 3. Дневная зона (угол меньше 90°)
     daylight_mask = angle < np.pi / 2
-    ax.pcolormesh(Theta, R, daylight_mask, shading='auto',
-                  cmap='YlOrBr', alpha=0.3, zorder=0)
+
+    # --- 4. Переводим в проекцию
+    r_vals = np.zeros_like(lat_grid, dtype=float)
+    theta_vals = np.zeros_like(lon_grid, dtype=float)
+
+    for i in range(lat_grid.shape[0]):
+        for j in range(lat_grid.shape[1]):
+            r, theta = transform_coordinates(
+                lat_grid[i, j], lon_grid[i, j],
+                center_lat, center_lon
+            )
+            r_vals[i, j] = r
+            theta_vals[i, j] = theta
+
+    # --- 5. Рисуем закраску
+    ax.pcolormesh(
+        theta_vals, r_vals, daylight_mask,
+        shading='auto', cmap='YlOrBr',
+        alpha=0.3, zorder=0
+    )
+
+
+# import matplotlib.patches as patches
+#
+
+def draw_daylight_polygon(ax, sun_lat, sun_lon, center_lat=90, center_lon=0, n_points=360):
+#     """
+#     Закрашивает дневную зону как многоугольник вокруг Солнца.
+#
+#     :param ax: полярная ось
+#     :param sun_lat: широта Солнца
+#     :param sun_lon: долгота Солнца
+#     :param center_lat: центр карты
+#     :param center_lon: центр карты
+#     :param n_points: число точек по окружности (чем больше — тем плавнее)
+#     """
+#     import numpy as np
+#     from utils import transform_coordinates
+    pass
+#     # --- углы вокруг Солнца для «круга дня»
+#     angles = np.linspace(0, 2 * np.pi, n_points)
+#
+#     # радиус ~ 90° на сферической Земле (дневная зона ~ полусфера)
+#     radius = 90  # можно подкорректировать по нужной ширине
+#
+#     # формируем точки по краю дневной зоны
+#     lats = sun_lat + radius * np.sin(angles)
+#     lons = sun_lon + radius * np.cos(angles)
+#
+#     # ограничиваем диапазон широт и долгот
+#     lats = np.clip(lats, -90, 90)
+#     lons = ((lons + 180) % 360) - 180
+#
+#     coords = [transform_coordinates(lat, lon, center_lat, center_lon)
+#               for lat, lon in zip(lats, lons)]
+#
+#     # создаём Polygon и добавляем на карту
+#     polygon = patches.Polygon(coords, closed=True, facecolor='green',
+#                               alpha=0.3, edgecolor=None, zorder=0)
+#     ax.add_patch(polygon)

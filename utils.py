@@ -90,17 +90,55 @@ def load_cities_from_csv(file_path: str) -> List[Dict]:
     return cities
 
 
-def get_subsolar_position(dt) -> Tuple[float, float]:
+import ephem
+import numpy as np
+from datetime import datetime, timezone
+from typing import Tuple
+
+
+import ephem
+import numpy as np
+from datetime import datetime, timezone
+from typing import Tuple
+
+
+def get_subsolar_position(dt: datetime) -> Tuple[float, float]:
     """
     Вычисляет субсолярную точку (широта, долгота) для заданной даты.
 
-    :param dt: datetime объект
+    :param dt: datetime (UTC!)
     :return: (lat, lon) в градусах
     """
-    sun = ephem.Sun(dt)
+    # --- приводим время к UTC
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+
+    # --- создаём "наблюдателя" в Гринвиче
+    obs = ephem.Observer()
+    obs.lat = "0"
+    obs.lon = "0"
+    obs.elev = 0
+    obs.date = dt
+
+    # --- положение Солнца
+    sun = ephem.Sun(obs)
+
+    # широта субсолнечной точки = деклинация
     lat = np.degrees(sun.dec)
-    lon = np.degrees(sun.ra)  # грубое приближение
+
+    # долгота субсолнечной точки = местное звёздное время - RA Солнца
+    lst = obs.sidereal_time()              # часовой угол в радианах
+    ra = sun.ra                            # прямое восхождение
+    lon = np.degrees(ra-lst)
+
+    # нормализуем в диапазон [-180, 180]
+    lon = (lon + 180) % 360 - 180
+
     return lat, lon
+
+
 
 
 def get_moon_position(dt) -> Tuple[float, float]:
