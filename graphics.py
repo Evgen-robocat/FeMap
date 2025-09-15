@@ -186,41 +186,45 @@ def draw_daylight(ax, sun_lat, sun_lon, center_lat=90, center_lon=0):
     )
 
 
-# import matplotlib.patches as patches
-#
+def draw_daylight_polygon(ax, sun_lat, sun_lon, center_lat=90, center_lon=0,
+                          n_lats=181, n_lons=361):
+    """
+    Рисует дневную зону в виде светового пятна вокруг Солнца.
+    Закрашивается весь участок, где угловое расстояние до Солнца < 90°.
 
-def draw_daylight_polygon(ax, sun_lat, sun_lon, center_lat=90, center_lon=0, n_points=360):
-#     """
-#     Закрашивает дневную зону как многоугольник вокруг Солнца.
-#
-#     :param ax: полярная ось
-#     :param sun_lat: широта Солнца
-#     :param sun_lon: долгота Солнца
-#     :param center_lat: центр карты
-#     :param center_lon: центр карты
-#     :param n_points: число точек по окружности (чем больше — тем плавнее)
-#     """
-#     import numpy as np
-#     from utils import transform_coordinates
-    pass
-#     # --- углы вокруг Солнца для «круга дня»
-#     angles = np.linspace(0, 2 * np.pi, n_points)
-#
-#     # радиус ~ 90° на сферической Земле (дневная зона ~ полусфера)
-#     radius = 90  # можно подкорректировать по нужной ширине
-#
-#     # формируем точки по краю дневной зоны
-#     lats = sun_lat + radius * np.sin(angles)
-#     lons = sun_lon + radius * np.cos(angles)
-#
-#     # ограничиваем диапазон широт и долгот
-#     lats = np.clip(lats, -90, 90)
-#     lons = ((lons + 180) % 360) - 180
-#
-#     coords = [transform_coordinates(lat, lon, center_lat, center_lon)
-#               for lat, lon in zip(lats, lons)]
-#
-#     # создаём Polygon и добавляем на карту
-#     polygon = patches.Polygon(coords, closed=True, facecolor='green',
-#                               alpha=0.3, edgecolor=None, zorder=0)
-#     ax.add_patch(polygon)
+    :param ax: полярная ось matplotlib
+    :param sun_lat: широта Солнца
+    :param sun_lon: долгота Солнца
+    :param center_lat: широта центра карты
+    :param center_lon: долгота центра карты
+    :param n_lats: число точек по широте для сетки
+    :param n_lons: число точек по долготе для сетки
+    """
+    import numpy as np
+    from utils import transform_coordinates
+
+    # --- Сетка широт и долгот
+    lats = np.linspace(-90, 90, n_lats)
+    lons = np.linspace(-180, 180, n_lons)
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+
+    # --- Маска дневной зоны
+    angle = np.arccos(
+        np.sin(np.radians(sun_lat)) * np.sin(np.radians(lat_grid)) +
+        np.cos(np.radians(sun_lat)) * np.cos(np.radians(lat_grid)) *
+        np.cos(np.radians(lon_grid - sun_lon))
+    )
+    daylight_mask = angle < np.pi / 2  # True внутри светового пятна
+
+    # --- Координаты точек пятна
+    lat_pts = lat_grid[daylight_mask]
+    lon_pts = lon_grid[daylight_mask]
+
+    # --- Преобразуем в полярную проекцию
+    coords = [transform_coordinates(lat, lon, center_lat, center_lon)
+              for lat, lon in zip(lat_pts, lon_pts)]
+    thetas = [theta for r, theta in coords]
+    rs = [r for r, theta in coords]
+
+    # --- Рисуем световое пятно точками
+    ax.scatter(thetas, rs, color='red', s=2, alpha=0.3, zorder=0)

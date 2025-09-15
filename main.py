@@ -36,10 +36,11 @@ draw_continents(ax, filename="data/coastline.txt",
 
 # --- Солнце и дневная зона ---
 dt = datetime(2025, 12, 21, 23, 59, 0)
+# dt = datetime.now()
 sun_lat, sun_lon = get_subsolar_position(dt)
 draw_sun(ax, sun_lat, sun_lon, center_lat, center_lon)
-draw_daylight(ax, sun_lat, sun_lon,center_lat, center_lon)
-# draw_daylight_polygon(ax, sun_lat, sun_lon, center_lat, center_lon)
+# draw_daylight(ax, sun_lat, sun_lon,center_lat, center_lon)
+draw_daylight_polygon(ax, sun_lat, sun_lon, center_lat, center_lon)
 # --- Луна ---
 # moon_lat, moon_lon = get_moon_position(dt)
 # draw_moon(ax, moon_lat, moon_lon, center_lat, center_lon)
@@ -50,4 +51,5 @@ ax.set_title(
     f"Subsolar point: широта {sun_lat:.2f}, долгота {sun_lon:.2f}",
     fontsize=20
 )
+fig.savefig("map.png", dpi=300, bbox_inches='tight')
 plt.show()
