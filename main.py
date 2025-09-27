@@ -10,7 +10,7 @@ from graphics import draw_grid, draw_continents, draw_cities, draw_sun, draw_moo
 from utils import get_subsolar_position, get_moon_position, load_continents_from_txt, load_cities_from_csv
 
 # Создаём фигуру
-#plt.style.use('dark_background')
+plt.style.use('dark_background')
 fig, ax = plt.subplots(figsize=CONFIG["figsize"], subplot_kw={'projection':'polar'})
 center_lat = CONFIG["center_lat"]
 center_lon = CONFIG["center_lon"]
@@ -35,8 +35,8 @@ draw_continents(ax, filename="data/coastline.txt",
 #draw_cities(ax, cities, center_lat, center_lon)
 
 # --- Солнце и дневная зона ---
-dt = datetime(2025, 12, 21, 23, 59, 0)
-# dt = datetime.now()
+# dt = datetime(2025, 12, 21, 23, 59, 0)
+dt = datetime.now()
 sun_lat, sun_lon = get_subsolar_position(dt)
 draw_sun(ax, sun_lat, sun_lon, center_lat, center_lon)
 # draw_daylight(ax, sun_lat, sun_lon,center_lat, center_lon)

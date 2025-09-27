@@ -138,17 +138,38 @@ def get_subsolar_position(dt: datetime) -> Tuple[float, float]:
 
     return lat, lon
 
+from datetime import datetime
+import numpy as np
+import ephem
+from typing import Tuple
 
 
-
-def get_moon_position(dt) -> Tuple[float, float]:
+def get_moon_position(dt: datetime) -> Tuple[float, float]:
     """
-    Вычисляет положение Луны (широта, долгота) для заданной даты.
+    Вычисляет сублунную точку (широта, долгота) для заданной даты (UTC!).
 
-    :param dt: datetime объект
+    :param dt: datetime (UTC)
     :return: (lat, lon) в градусах
     """
-    moon = ephem.Moon(dt)
+    # --- создаём "наблюдателя" в Гринвиче
+    obs = ephem.Observer()
+    obs.lat = "0"
+    obs.lon = "0"
+    obs.elev = 0
+    obs.date = dt
+
+    # --- положение Луны
+    moon = ephem.Moon(obs)
+
+    # широта сублунной точки = деклинация
     lat = np.degrees(moon.dec)
-    lon = np.degrees(moon.ra)  # грубое приближение
+
+    # долгота сублунной точки = RA - LST
+    lst = obs.sidereal_time()
+    ra = moon.ra
+    lon = np.degrees(ra - lst)
+
+    # нормализуем [-180, 180]
+    lon = (lon + 180) % 360 - 180
+
     return lat, lon

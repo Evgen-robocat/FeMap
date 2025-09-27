@@ -12,6 +12,7 @@ graphics.py
 import matplotlib.pyplot as plt
 import numpy as np
 from utils import transform_coordinates
+import matplotlib.patheffects as path_effects
 
 
 def draw_grid(ax, center_lat=90, center_lon=0):
@@ -119,10 +120,25 @@ def draw_cities(ax, cities, center_lat, center_lon):
 
 
 def draw_sun(ax, sun_lat, sun_lon, center_lat, center_lon):
-    """Рисует Солнце"""
+    """Рисует Солнце с зелёной окантовкой"""
     r, theta = transform_coordinates(sun_lat, sun_lon, center_lat, center_lon)
-    ax.scatter(theta, r, marker='*', color='orange', s=80, label='Солнце', zorder=10)
-    ax.text(theta-0.2, r+0.3, "Sun", color='orange', fontsize=16)
+
+    # --- Звёздочка (Солнце) ---
+    # Сначала зелёный "контур" (чуть больше)
+    ax.scatter(theta, r, marker='*', color='green', s=120, zorder=9)
+    # Поверх — оранжевое Солнце
+    ax.scatter(theta, r, marker='*', color='orange', s=80, zorder=10)
+
+    # --- Подпись ---
+    ax.text(
+        theta - 0.2, r + 0.3, "Sun",
+        color='orange', fontsize=16, zorder=11,
+        path_effects=[
+            # зелёная окантовка
+            path_effects.Stroke(linewidth=3, foreground='green'),
+            path_effects.Normal()
+        ]
+    )
 
 def draw_moon(ax, moon_lat, moon_lon, center_lat, center_lon):
     """Рисует Луну"""
@@ -228,3 +244,43 @@ def draw_daylight_polygon(ax, sun_lat, sun_lon, center_lat=90, center_lon=0,
 
     # --- Рисуем световое пятно точками
     ax.scatter(thetas, rs, color='red', s=2, alpha=0.3, zorder=0)
+
+
+import matplotlib.pyplot as plt
+import ephem
+import numpy as np
+
+def draw_projection(dt=None, show_sun=True, show_moon=True):
+    fig, ax = plt.subplots(figsize=(10,5))
+
+    ax.set_xlim(-180, 180)
+    ax.set_ylim(-90, 90)
+    ax.set_xlabel("Долгота")
+    ax.set_ylabel("Широта")
+    ax.set_title(f"Положение Солнца и Луны на {dt}" if dt else "Текущее время")
+
+    ax.fill_between([-180,180], -90, 90, color="lightgreen", alpha=0.2)
+
+    if dt is None:
+        obs_date = ephem.now()
+    else:
+        obs_date = ephem.Date(dt)
+
+    obs = ephem.Observer()
+    obs.date = obs_date
+
+    if show_sun:
+        sun = ephem.Sun(obs)
+        lat_sun = np.degrees(sun.sublat)
+        lon_sun = np.degrees(sun.sublong)
+        ax.plot(lon_sun, lat_sun, 'yo', markersize=12, label="Солнце")
+
+    if show_moon:
+        moon = ephem.Moon(obs)
+        lat_moon = np.degrees(moon.sublat)
+        lon_moon = np.degrees(moon.sublong)
+        ax.plot(lon_moon, lat_moon, 'o', color='lightblue', markersize=10, label="Луна")
+
+    ax.legend()
+    ax.grid(True)
+    return fig
