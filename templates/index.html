@@ -2,43 +2,22 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Карта с центром</title>
+    <title>Карта Земли</title>
+    <style>
+        body { text-align: center; font-family: Arial, sans-serif; }
+        .info { margin: 10px 0; font-size: 1.1em; }
+        img { margin-top: 20px; border: 1px solid #ccc; }
+    </style>
 </head>
 <body>
-    <h2>Карта</h2>
-    <img id="mapImage" src="/map?lat=90&lon=0" alt="Карта"><br><br>
+    <h1>Карта Земли</h1>
 
-    <h3>Настройки центра карты</h3>
-    <label>Широта центра: <span id="latValue">90</span>°</label><br>
-    <input type="range" id="lat" min="-90" max="90" value="90"><br><br>
+    <div class="info">
+        <p>Центр проекции: Северный полюс (lat={{ center_lat }}°, lon={{ center_lon }}°)</p>
+        <p>Время местное: {{ local_time }}</p>
+        <p>UTC: {{ utc_time }}</p>
+    </div>
 
-    <label>Долгота центра: <span id="lonValue">0</span>°</label><br>
-    <input type="range" id="lon" min="-180" max="180" value="0"><br><br>
-
-    <h3>Что показывать:</h3>
-    <label><input type="checkbox" id="sun"> Солнце</label><br>
-    <label><input type="checkbox" id="moon"> Луна</label><br>
-    <label><input type="checkbox" id="iss"> МКС</label><br><br>
-
-    <button onclick="updateMap()">Применить</button>
-
-    <script>
-        const latSlider = document.getElementById("lat");
-        const lonSlider = document.getElementById("lon");
-        const latValue = document.getElementById("latValue");
-        const lonValue = document.getElementById("lonValue");
-
-        latSlider.oninput = () => latValue.innerText = latSlider.value;
-        lonSlider.oninput = () => lonValue.innerText = lonSlider.value;
-
-        function updateMap() {
-            const lat = latSlider.value;
-            const lon = lonSlider.value;
-            const sun = document.getElementById("sun").checked;
-            const moon = document.getElementById("moon").checked;
-            const iss = document.getElementById("iss").checked;
-            document.getElementById("mapImage").src = `/map?lat=${lat}&lon=${lon}&sun=${sun}&moon=${moon}&iss=${iss}&_=${Date.now()}`;
-        }
-    </script>
+    <img src="{{ url_for('static', filename='map.png') }}" alt="Карта Земли" width="600">
 </body>
 </html>
