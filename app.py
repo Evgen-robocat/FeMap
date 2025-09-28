@@ -1,3 +1,4 @@
+from cartopy.crs import AzimuthalEquidistant
 from flask import Flask, send_file
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
@@ -7,8 +8,8 @@ import io
 app = Flask(__name__)
 
 def generate_map():
-    fig = plt.figure(figsize=(10, 5))
-    ax = fig.add_subplot(1, 1, 1, projection=ccrs.Robinson())
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(1, 1, 1, projection=AzimuthalEquidistant())
 
     ax.set_global()
 
@@ -17,7 +18,7 @@ def generate_map():
     ax.add_feature(cfeature.LAND, facecolor='beige')
 
     # Границы государств
-    ax.add_feature(cfeature.BORDERS, edgecolor='gray')
+    # ax.add_feature(cfeature.BORDERS, edgecolor='gray')
 
     # Линии сетки
     ax.gridlines(draw_labels=True, color='gray', linestyle='--', linewidth=0.5)
