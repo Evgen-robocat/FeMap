@@ -67,4 +67,4 @@ def index():
                            center_lat=90, center_lon=0)
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(debug=True)
