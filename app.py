@@ -1,68 +1,48 @@
+from flask import Flask, send_file
 import matplotlib
 
-matplotlib.use('Agg')  # Используем бэкенд без GUI для работы на сервере
+matplotlib.use('Agg')  # чтобы не требовался GUI
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
-import cartopy.feature as cfeature
 from io import BytesIO
-from flask import Flask, send_file, request
 
 app = Flask(__name__)
 
 
-def generate_map(central_longitude=0, central_latitude=90):
-    """
-    Генерирует карту в азимутальной эквидистантной проекции.
-
-    central_longitude: долгота центра карты
-    central_latitude: широта центра карты
-    """
+def generate_map():
+    # Создаем фигуру
     fig = plt.figure(figsize=(8, 8))
 
-    # Азимутальная эквидистантная проекция
+    # Азимутальная равноудаленная проекция, центр на Северном полюсе
     ax = fig.add_subplot(
         1, 1, 1,
-        projection=ccrs.AzimuthalEquidistant(
-            central_longitude=central_longitude,
-            central_latitude=central_latitude
-        )
+        projection=ccrs.AzimuthalEquidistant(central_longitude=0, central_latitude=90)
     )
 
-    # Добавляем цвета суши и воды
-    ax.add_feature(cfeature.LAND, facecolor='lightgray')
-    ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
+    # Глобальные границы и сетка
+    ax.set_global()
+    ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.7, linestyle='--')
 
-    # Добавляем побережья и границы
-    ax.add_feature(cfeature.COASTLINE)
-    ax.add_feature(cfeature.BORDERS, linestyle=':')
+    # Цвет фона (например, вода)
+    ax.background_img = None  # отключаем текстуру
+    ax.set_facecolor("lightsteelblue")
 
-    # Ограничиваем видимую область (50° широты до полюса)
-    ax.set_extent([-180, 180, 50, 90], crs=ccrs.PlateCarree())
+    # Пример: наносим границы стран
+    ax.add_feature(ccrs.feature.BORDERS, linewidth=0.5)
 
-    # Сетка широт и меридианов
-    gl = ax.gridlines(draw_labels=True, linewidth=1, color='green', alpha=0.5, linestyle='--')
-    gl.top_labels = False
-    gl.right_labels = False
-
-    # Сохраняем картинку в буфер
+    # Сохраняем в буфер
     buf = BytesIO()
     plt.savefig(buf, format='png', bbox_inches='tight')
-    plt.close(fig)
+    plt.close(fig)  # Закрываем фигуру, чтобы не накапливались
     buf.seek(0)
     return buf
 
 
-@app.route('/')
+@app.route("/")
 def index():
-    """
-    Основной маршрут:
-    Можно передавать параметры ?lon=...&lat=... для изменения центра карты.
-    """
-    lon = request.args.get('lon', default=0, type=float)
-    lat = request.args.get('lat', default=90, type=float)
-    buf = generate_map(central_longitude=lon, central_latitude=lat)
-    return send_file(buf, mimetype='image/png')
+    img_buf = generate_map()
+    return send_file(img_buf, mimetype='image/png')
 
 
-if __name__ == '__main__':
-    app.run(debug=True)
+if __name__ == "__main__":
+    app.run()
