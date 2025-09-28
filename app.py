@@ -1,48 +1,64 @@
-from flask import Flask, send_file
-import matplotlib
-
-matplotlib.use('Agg')  # чтобы не требовался GUI
+from flask import Flask, send_file, request
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+from cartopy.feature import NaturalEarthFeature
 from io import BytesIO
 
 app = Flask(__name__)
 
 
-def generate_map():
-    # Создаем фигуру
-    fig = plt.figure(figsize=(8, 8))
-
-    # Азимутальная равноудаленная проекция, центр на Северном полюсе
+def generate_polar_map(central_lat=90, central_lon=0):
+    """
+    Генерация карты в азимутальной эквидистантной проекции.
+    central_lat, central_lon — центр проекции.
+    Возвращает объект BytesIO с PNG.
+    """
+    fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(
         1, 1, 1,
-        projection=ccrs.AzimuthalEquidistant(central_longitude=0, central_latitude=90)
+        projection=ccrs.AzimuthalEquidistant(central_latitude=central_lat,
+                                             central_longitude=central_lon)
     )
 
-    # Глобальные границы и сетка
-    ax.set_global()
-    ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.7, linestyle='--')
+    # Океан
+    ax.add_feature(cfeature.OCEAN.with_scale('50m'), facecolor='lightblue')
 
-    # Цвет фона (например, вода)
-    ax.background_img = None  # отключаем текстуру
-    ax.set_facecolor("lightsteelblue")
+    # Суша
+    land = NaturalEarthFeature(
+        category='physical', name='land', scale='50m',
+        facecolor='saddlebrown', edgecolor='darkgreen'
+    )
+    ax.add_feature(land, alpha=0.7)
 
-    # Пример: наносим границы стран
-    ax.add_feature(ccrs.feature.BORDERS, linewidth=0.5)
+    # Побережья и границы
+    ax.add_feature(cfeature.COASTLINE.with_scale('50m'), linewidth=0.5)
+    ax.add_feature(cfeature.BORDERS.with_scale('50m'), linewidth=0.3)
 
-    # Сохраняем в буфер
-    buf = BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight')
-    plt.close(fig)  # Закрываем фигуру, чтобы не накапливались
-    buf.seek(0)
-    return buf
+    # Сетка широт/долгот
+    ax.gridlines()
+
+    # Сохраняем в BytesIO
+    img_io = BytesIO()
+    fig.savefig(img_io, format='png', dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    img_io.seek(0)
+    return img_io
 
 
-@app.route("/")
+@app.route('/')
 def index():
-    img_buf = generate_map()
-    return send_file(img_buf, mimetype='image/png')
+    # Позволяем менять центр через GET параметры, например ?lat=90&lon=0
+    lat = request.args.get('lat', default=90, type=float)
+    lon = request.args.get('lon', default=0, type=float)
+
+    img_io = generate_polar_map(central_lat=lat, central_lon=lon)
+    return send_file(img_io, mimetype='image/png', download_name='polar_map.png')
 
 
-if __name__ == "__main__":
-    app.run()
+if __name__ == '__main__':
+    # Render сам назначает порт через $PORT
+    import os
+
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port)
