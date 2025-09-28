@@ -1,35 +1,54 @@
+from flask import Flask, send_file
+import os
 import matplotlib
 
-matplotlib.use('Agg')  # чтобы не требовался GUI
+matplotlib.use('Agg')  # Важный момент: серверный рендер без GUI
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
+app = Flask(__name__)
+
+# Путь для сохранения карты
+MAP_FILE = "static/map.png"
+os.makedirs("static", exist_ok=True)
+
 
 def generate_map():
-    # создаём фигуру и карту в проекции Робинсона
-    fig = plt.figure(figsize=(12, 6))
+    fig = plt.figure(figsize=(10, 5))
     ax = fig.add_subplot(1, 1, 1, projection=ccrs.Robinson())
 
-    # глобальный вид
-    ax.set_global()
-
-    # Заменяем background_patch на set_facecolor
+    # Цвет "океана"
     ax.set_facecolor("lightsteelblue")
 
-    # добавляем границы стран
-    ax.add_feature(cfeature.BORDERS, linewidth=0.5)
-    ax.add_feature(cfeature.COASTLINE, linewidth=0.5)
+    # Границы континентов и страны
+    ax.add_feature(cfeature.LAND, facecolor='lightgreen')
+    ax.add_feature(cfeature.OCEAN, facecolor='lightsteelblue')
+    ax.add_feature(cfeature.BORDERS, edgecolor='gray')
+    ax.add_feature(cfeature.COASTLINE)
 
-    # пример: stock image карты (Cartopy)
+    # Глобальная карта
+    ax.set_global()
+
+    # stock_img использует scipy/pykdtree
     try:
         ax.stock_img()
     except Exception as e:
-        print("Stock image не доступна:", e)
+        print("Stock image skipped:", e)
 
-    # сохраняем в файл
-    output_file = "static/map.png"
-    fig.savefig(output_file, dpi=150, bbox_inches='tight')
+    # Сохраняем в файл
+    fig.savefig(MAP_FILE, bbox_inches='tight')
     plt.close(fig)
+    return MAP_FILE
 
-    return output_file
+
+@app.route('/')
+def index():
+    # Генерируем карту
+    generate_map()
+    # Отправляем как файл
+    return send_file(MAP_FILE, mimetype='image/png')
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
