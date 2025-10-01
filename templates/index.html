@@ -6,7 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <style>
-        /* Простейшая стилизация — можно улучшить позже */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
                          Roboto, "Helvetica Neue", Arial;
@@ -25,7 +24,7 @@
             height: auto;
             border: 1px solid #ccc;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
-            display: block; /* гарантируем, что картинка будет сверху */
+            display: block;
             margin: 0 auto 16px;
             background: white;
         }
@@ -88,7 +87,7 @@
         </h2>
     </header>
 
-    <!-- Карта — сверху -->
+    <!-- Карта -->
     <img id="map_img" src="/map?lat={{ default_lat }}&lon={{ default_lon }}"
          alt="Polar map">
 
@@ -109,12 +108,9 @@
         </div>
 
         <div class="buttons">
-            <!-- Обновить: подгружает карту под выбранные координаты -->
             <button id="update_btn" class="primary" type="button">
                 Обновить
             </button>
-
-            <!-- Сброс: возвращает значения по умолчанию и загружает первоначальную карту -->
             <button id="reset_btn" type="button">Сбросить</button>
         </div>
     </div>
@@ -131,23 +127,21 @@
         const updateBtn = document.getElementById('update_btn');
         const resetBtn = document.getElementById('reset_btn');
 
-        // Значения по умолчанию из шаблона (преобразуем в числа)
+        // Значения по умолчанию
         const defaultLat = Number('{{ default_lat }}');
         const defaultLon = Number('{{ default_lon }}');
 
-        // При движении ползунков обновляем текстовые поля,
-        // но не перезагружаем картинку — она обновится по кнопке.
+        // При движении ползунков обновляем подписи
         latInput.oninput = function () {
             latValSpan.textContent = latInput.value;
         };
-
         lonInput.oninput = function () {
             lonValSpan.textContent = lonInput.value;
         };
 
-        // Кнопка "Обновить" — подставляет значения в заголовок и
-        // обновляет картинку, добавляя временную метку, чтобы избежать кэша.
+        // Кнопка "Обновить"
         updateBtn.onclick = function () {
+            console.log("Обновить нажато"); // для отладки
             const lat = latInput.value;
             const lon = lonInput.value;
 
@@ -155,25 +149,22 @@
             titleLat.textContent = lat;
             titleLon.textContent = lon;
 
-            // Загружаем картинку с новыми параметрами
+            // Обновляем картинку с добавлением временной метки
             mapImg.src = `/map?lat=${lat}&lon=${lon}&t=${Date.now()}`;
         };
 
-        // Кнопка "Сбросить" — возвращает ползунки и заголовок к дефолту
+        // Кнопка "Сбросить"
         resetBtn.onclick = function () {
-            // Сбрасываем значения ползунков
+            console.log("Сбросить нажато"); // для отладки
             latInput.value = defaultLat;
             lonInput.value = defaultLon;
 
-            // Обновляем текстовые подписи
             latValSpan.textContent = defaultLat;
             lonValSpan.textContent = defaultLon;
 
-            // Обновляем заголовок
             titleLat.textContent = defaultLat;
             titleLon.textContent = defaultLon;
 
-            // Загружаем первоначальную картинку
             mapImg.src = `/map?lat=${defaultLat}&lon=${defaultLon}&t=${Date.now()}`;
         };
     </script>
