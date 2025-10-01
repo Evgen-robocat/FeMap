@@ -1,63 +1,181 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>Интерактивная карта</title>
+    <meta charset="utf-8">
+    <title>Интерактивная полярная карта</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
     <style>
+        /* Простейшая стилизация — можно улучшить позже */
         body {
-            font-family: sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                         Roboto, "Helvetica Neue", Arial;
+            background: #f6f7f9;
+            margin: 0;
+            padding: 20px;
             text-align: center;
-            background: #f4f4f4;
         }
+
+        header {
+            margin-bottom: 12px;
+        }
+
+        #map_img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ccc;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+            display: block; /* гарантируем, что картинка будет сверху */
+            margin: 0 auto 16px;
+            background: white;
+        }
+
         .controls {
-            margin: 20px;
+            display: inline-block;
+            text-align: left;
+            background: #ffffff;
+            padding: 12px 16px;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
         }
-        input[type=range] {
-            width: 300px;
+
+        .row {
+            margin: 8px 0;
+        }
+
+        label {
+            display: inline-block;
+            width: 80px;
+        }
+
+        input[type="range"] {
+            width: 260px;
+            vertical-align: middle;
+        }
+
+        .buttons {
+            margin-top: 12px;
+            text-align: center;
+        }
+
+        button {
+            padding: 8px 12px;
+            margin: 0 6px;
+            border-radius: 6px;
+            border: 1px solid #bbb;
+            background: #f0f0f0;
+            cursor: pointer;
+        }
+
+        button.primary {
+            background: #2f80ed;
+            color: white;
+            border-color: #2f80ed;
+        }
+
+        .caption {
+            font-size: 14px;
+            color: #333;
         }
     </style>
 </head>
 <body>
-    <h2>Интерактивная карта</h2>
+    <!-- Заголовок с текущим центром -->
+    <header>
+        <h2 id="title_center">
+            Центр карты: широта <span id="title_lat">{{ default_lat }}</span>°,
+            долгота <span id="title_lon">{{ default_lon }}</span>°
+        </h2>
+    </header>
 
-    <div class="controls">
-        <!-- Ползунок для широты -->
-        <label>Широта: <span id="lat_val">90</span>°</label><br>
-        <input type="range" id="lat" min="-90" max="90" value="90"><br><br>
+    <!-- Карта — сверху -->
+    <img id="map_img" src="/map?lat={{ default_lat }}&lon={{ default_lon }}"
+         alt="Polar map">
 
-        <!-- Ползунок для долготы -->
-        <label>Долгота: <span id="lon_val">0</span>°</label><br>
-        <input type="range" id="lon" min="-180" max="180" value="0">
+    <!-- Контролы -->
+    <div class="controls" role="region" aria-label="controls">
+        <div class="row">
+            <label for="lat">Широта</label>
+            <input id="lat" type="range" min="-90" max="90"
+                   value="{{ default_lat }}">
+            <span id="lat_val" class="caption">{{ default_lat }}</span>°
+        </div>
+
+        <div class="row">
+            <label for="lon">Долгота</label>
+            <input id="lon" type="range" min="-180" max="180"
+                   value="{{ default_lon }}">
+            <span id="lon_val" class="caption">{{ default_lon }}</span>°
+        </div>
+
+        <div class="buttons">
+            <!-- Обновить: подгружает карту под выбранные координаты -->
+            <button id="update_btn" class="primary" type="button">
+                Обновить
+            </button>
+
+            <!-- Сброс: возвращает значения по умолчанию и загружает первоначальную карту -->
+            <button id="reset_btn" type="button">Сбросить</button>
+        </div>
     </div>
 
-    <!-- Картинка карты -->
-    <img id="map_img" src="/map?lat=90&lon=0" width="600">
-
     <script>
-        // Ссылки на элементы управления
-        const latSlider = document.getElementById("lat");
-        const lonSlider = document.getElementById("lon");
-        const latVal = document.getElementById("lat_val");
-        const lonVal = document.getElementById("lon_val");
-        const mapImg = document.getElementById("map_img");
+        // Получаем элементы
+        const latInput = document.getElementById('lat');
+        const lonInput = document.getElementById('lon');
+        const latValSpan = document.getElementById('lat_val');
+        const lonValSpan = document.getElementById('lon_val');
+        const titleLat = document.getElementById('title_lat');
+        const titleLon = document.getElementById('title_lon');
+        const mapImg = document.getElementById('map_img');
+        const updateBtn = document.getElementById('update_btn');
+        const resetBtn = document.getElementById('reset_btn');
 
-        // Функция обновления карты
-        function updateMap() {
-            const lat = latSlider.value;
-            const lon = lonSlider.value;
+        // Значения по умолчанию из шаблона (преобразуем в числа)
+        const defaultLat = Number('{{ default_lat }}');
+        const defaultLon = Number('{{ default_lon }}');
 
-            // Обновляем текстовые значения
-            latVal.textContent = lat;
-            lonVal.textContent = lon;
+        // При движении ползунков обновляем текстовые поля,
+        // но не перезагружаем картинку — она обновится по кнопке.
+        latInput.oninput = function () {
+            latValSpan.textContent = latInput.value;
+        };
 
-            // Обновляем картинку с параметрами
-            // добавляем "t=Date.now()" чтобы обойти кэш браузера
+        lonInput.oninput = function () {
+            lonValSpan.textContent = lonInput.value;
+        };
+
+        // Кнопка "Обновить" — подставляет значения в заголовок и
+        // обновляет картинку, добавляя временную метку, чтобы избежать кэша.
+        updateBtn.onclick = function () {
+            const lat = latInput.value;
+            const lon = lonInput.value;
+
+            // Обновляем заголовок
+            titleLat.textContent = lat;
+            titleLon.textContent = lon;
+
+            // Загружаем картинку с новыми параметрами
             mapImg.src = `/map?lat=${lat}&lon=${lon}&t=${Date.now()}`;
-        }
+        };
 
-        // Подключаем обработчики событий
-        latSlider.oninput = updateMap;
-        lonSlider.oninput = updateMap;
+        // Кнопка "Сбросить" — возвращает ползунки и заголовок к дефолту
+        resetBtn.onclick = function () {
+            // Сбрасываем значения ползунков
+            latInput.value = defaultLat;
+            lonInput.value = defaultLon;
+
+            // Обновляем текстовые подписи
+            latValSpan.textContent = defaultLat;
+            lonValSpan.textContent = defaultLon;
+
+            // Обновляем заголовок
+            titleLat.textContent = defaultLat;
+            titleLon.textContent = defaultLon;
+
+            // Загружаем первоначальную картинку
+            mapImg.src = `/map?lat=${defaultLat}&lon=${defaultLon}&t=${Date.now()}`;
+        };
     </script>
 </body>
 </html>
