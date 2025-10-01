@@ -2,22 +2,62 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Карта Земли</title>
+    <title>Интерактивная карта</title>
     <style>
-        body { text-align: center; font-family: Arial, sans-serif; }
-        .info { margin: 10px 0; font-size: 1.1em; }
-        img { margin-top: 20px; border: 1px solid #ccc; }
+        body {
+            font-family: sans-serif;
+            text-align: center;
+            background: #f4f4f4;
+        }
+        .controls {
+            margin: 20px;
+        }
+        input[type=range] {
+            width: 300px;
+        }
     </style>
 </head>
 <body>
-    <h1>Карта Земли</h1>
+    <h2>Интерактивная карта</h2>
 
-    <div class="info">
-        <p>Центр проекции: Северный полюс (lat={{ center_lat }}°, lon={{ center_lon }}°)</p>
-        <p>Время местное: {{ local_time }}</p>
-        <p>UTC: {{ utc_time }}</p>
+    <div class="controls">
+        <!-- Ползунок для широты -->
+        <label>Широта: <span id="lat_val">90</span>°</label><br>
+        <input type="range" id="lat" min="-90" max="90" value="90"><br><br>
+
+        <!-- Ползунок для долготы -->
+        <label>Долгота: <span id="lon_val">0</span>°</label><br>
+        <input type="range" id="lon" min="-180" max="180" value="0">
     </div>
 
-    <img src="{{ url_for('static', filename='map.png') }}" alt="Карта Земли" width="600">
+    <!-- Картинка карты -->
+    <img id="map_img" src="/map?lat=90&lon=0" width="600">
+
+    <script>
+        // Ссылки на элементы управления
+        const latSlider = document.getElementById("lat");
+        const lonSlider = document.getElementById("lon");
+        const latVal = document.getElementById("lat_val");
+        const lonVal = document.getElementById("lon_val");
+        const mapImg = document.getElementById("map_img");
+
+        // Функция обновления карты
+        function updateMap() {
+            const lat = latSlider.value;
+            const lon = lonSlider.value;
+
+            // Обновляем текстовые значения
+            latVal.textContent = lat;
+            lonVal.textContent = lon;
+
+            // Обновляем картинку с параметрами
+            // добавляем "t=Date.now()" чтобы обойти кэш браузера
+            mapImg.src = `/map?lat=${lat}&lon=${lon}&t=${Date.now()}`;
+        }
+
+        // Подключаем обработчики событий
+        latSlider.oninput = updateMap;
+        lonSlider.oninput = updateMap;
+    </script>
 </body>
 </html>
