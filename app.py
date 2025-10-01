@@ -36,7 +36,7 @@ def generate_polar_map(central_lat: float = DEFAULT_LATITUDE,
     :return: BytesIO с PNG-изображением.
     """
     # Создаём фигуру matplotlib
-    fig = plt.figure(figsize=(8, 8))
+    fig = plt.figure(figsize=(4, 4))
     ax = fig.add_subplot(
         1, 1, 1,
         projection=ccrs.AzimuthalEquidistant(
