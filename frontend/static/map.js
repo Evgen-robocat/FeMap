@@ -1,21 +1,17 @@
 /**
  * Файл    : frontend/static/map.js
- * Версия  : 4.1.2
+ * Версия  : 4.1.3
  * Дата    : 2026-04-19
  * Автор   : Claude Sonnet 4.6 (Anthropic)
  *
- * ИЗМЕНЕНИЯ v4.1.2:
- *   - Добавлен d3.zoom(): колесо мыши / пинч / перетаскивание
- *   - Все слои обёрнуты в <g id="map-content"> — зум через transform, без пересчёта проекции
- *   - setupZoom() — инициализация, scaleExtent [0.5, 20]
- *   - resetZoom() — плавный возврат к identity (кнопка + при ресайзе)
- *   - Двойной клик по карте — сброс зума (вместо стандартного zoom-in)
+ * ИЗМЕНЕНИЯ v4.1.3:
+ *   - resetZoom() возвращает проекцию на Северный полюс (не экватор)
+ *   - scaleExtent [0.3, 50] — глубокое приближение, небольшое отдаление
  *
  * АРХИТЕКТУРА:
  *   land.geojson    — ne_110m_land, слитный MultiPolygon суши.
- *                     Решает баг инверсии Антарктиды при полярной проекции.
  *   borders.geojson — ne_110m_admin_0_boundary_lines, линии границ.
- *   clipAngle(179.9) — весь глобус без артефактов (работает с ne_110m_land)
+ *   clipAngle(179.9) — весь глобус без артефактов
  *   requestAnimationFrame — гарантирует CSS-layout до createSVG()
  */
 
@@ -40,64 +36,54 @@ const state = {
   land: null, borders: null,
   svg: null, projection: null, path: null,
   width: 0, height: 0,
-  zoom: null,   // d3.zoom behaviour
+  zoom: null,
 };
-
-// ─── SVG ───────────────────────────────────────────────────────────────────
 
 function createSVG() {
   const container = document.getElementById('map');
   state.width  = container.clientWidth;
   state.height = container.clientHeight;
-
   state.svg = d3.select('#map')
     .append('svg')
     .attr('width',  state.width)
     .attr('height', state.height)
     .style('display', 'block')
     .style('background', COLORS.background);
-
-  // Все слои — внутри одной группы; зум сдвигает/масштабирует только её
   const mapContent = state.svg.append('g').attr('id', 'map-content');
   ['water','land','borders','grid','border','labels'].forEach(id =>
     mapContent.append('g').attr('id', 'layer-' + id)
   );
-
   new ResizeObserver(() => {
     const w = container.clientWidth, h = container.clientHeight;
     if (Math.abs(w - state.width) < 2 && Math.abs(h - state.height) < 2) return;
     state.width = w; state.height = h;
     state.svg.attr('width', w).attr('height', h);
-    resetZoom();          // убрать накопленный transform перед перестройкой
+    resetZoom();
     buildProjection();
     render();
   }).observe(container);
 }
 
-// ─── ZOOM ──────────────────────────────────────────────────────────────────
-
 function setupZoom() {
   state.zoom = d3.zoom()
-    .scaleExtent([0.5, 20])
+    .scaleExtent([0.3, 50])
     .on('zoom', (event) => {
       state.svg.select('#map-content')
         .attr('transform', event.transform);
     });
-
   state.svg
     .call(state.zoom)
-    // Двойной клик: сброс вместо стандартного zoom-in
     .on('dblclick.zoom', () => resetZoom());
 }
 
 function resetZoom() {
   if (!state.zoom) return;
-  state.svg
-    .transition().duration(300)
+  document.getElementById('inp-lat').value = 90;
+  document.getElementById('inp-lon').value = 0;
+  applyCenter(90, 0);
+  state.svg.transition().duration(300)
     .call(state.zoom.transform, d3.zoomIdentity);
 }
-
-// ─── ПРОЕКЦИЯ ──────────────────────────────────────────────────────────────
 
 function buildProjection() {
   const w = state.width  || window.innerWidth  || 300;
@@ -109,8 +95,6 @@ function buildProjection() {
   state.path = d3.geoPath(state.projection);
 }
 
-// ─── ДАННЫЕ ────────────────────────────────────────────────────────────────
-
 async function loadData() {
   setStatus('Загрузка данных...');
   try {
@@ -119,7 +103,7 @@ async function loadData() {
     ]);
     const nL = state.land?.features?.length ?? 0;
     const nB = state.borders?.features?.length ?? 0;
-    setStatus(`v4.1.2 · ${nL} полигонов · ${nB} границ`);
+    setStatus(`v4.1.3 · ${nL} полигонов · ${nB} границ`);
   } catch (err) {
     console.error('[map.js] Ошибка загрузки:', err);
     state.land = state.borders = { type: 'FeatureCollection', features: [] };
@@ -128,26 +112,18 @@ async function loadData() {
   render();
 }
 
-// ─── РЕНДЕР ────────────────────────────────────────────────────────────────
-
 function render() {
   if (!state.svg || !state.projection) return;
-
-  // Вода
   const lw = state.svg.select('#layer-water');
   lw.selectAll('*').remove();
   lw.append('path').datum({ type: 'Sphere' })
     .attr('d', state.path).attr('fill', COLORS.water).attr('stroke', 'none');
-
-  // Суша
   const ll = state.svg.select('#layer-land');
   ll.selectAll('*').remove();
   if (state.land) {
     ll.selectAll('path').data(state.land.features).join('path')
       .attr('d', state.path).attr('fill', COLORS.land).attr('stroke', 'none');
   }
-
-  // Границы
   const lb2 = state.svg.select('#layer-borders');
   lb2.selectAll('*').remove();
   if (state.borders) {
@@ -155,8 +131,6 @@ function render() {
       .attr('d', state.path).attr('fill', 'none')
       .attr('stroke', COLORS.borders).attr('stroke-width', 0.6);
   }
-
-  // Сетка
   const lg = state.svg.select('#layer-grid');
   lg.selectAll('*').remove();
   if (state.showGrid) {
@@ -164,15 +138,11 @@ function render() {
       .attr('d', state.path).attr('fill', 'none')
       .attr('stroke', COLORS.grid).attr('stroke-width', 0.5).attr('opacity', 0.7);
   }
-
-  // Граница диска
   const lb = state.svg.select('#layer-border');
   lb.selectAll('*').remove();
   lb.append('path').datum({ type: 'Sphere' })
     .attr('d', state.path).attr('fill', 'none')
     .attr('stroke', COLORS.diskBorder).attr('stroke-width', 1.5);
-
-  // Подписи
   const llab = state.svg.select('#layer-labels');
   llab.selectAll('*').remove();
   if (state.showLabels) {
@@ -186,8 +156,6 @@ function render() {
     });
   }
 }
-
-// ─── UI ────────────────────────────────────────────────────────────────────
 
 function applyCenter(lat, lon) {
   lat = Math.max(-90,  Math.min(90,  parseFloat(lat) || 0));
@@ -207,13 +175,11 @@ function bindUI() {
       document.getElementById('inp-lon').value
     )
   );
-
   ['inp-lat', 'inp-lon'].forEach(id =>
     document.getElementById(id).addEventListener('keydown', e => {
       if (e.key === 'Enter') document.getElementById('btn-apply').click();
     })
   );
-
   document.querySelectorAll('.btn-sign').forEach(btn =>
     btn.addEventListener('click', () => {
       const inp = document.getElementById(btn.dataset.target);
@@ -222,15 +188,12 @@ function bindUI() {
       if (!isNaN(v) && v !== 0) inp.value = String(-v);
     })
   );
-
   document.getElementById('chk-grid').addEventListener('change', e => {
     state.showGrid = e.target.checked; render();
   });
-
   document.getElementById('chk-labels').addEventListener('change', e => {
     state.showLabels = e.target.checked; render();
   });
-
   document.querySelectorAll('.btn-preset').forEach(btn =>
     btn.addEventListener('click', () => {
       const lat = parseFloat(btn.dataset.lat), lon = parseFloat(btn.dataset.lon);
@@ -239,8 +202,6 @@ function bindUI() {
       applyCenter(lat, lon);
     })
   );
-
-  // Сброс зума по кнопке
   const btnResetZoom = document.getElementById('btn-reset-zoom');
   if (btnResetZoom) btnResetZoom.addEventListener('click', resetZoom);
 }
@@ -250,14 +211,12 @@ function setStatus(msg) {
   if (el) el.textContent = msg;
 }
 
-// ─── INIT ──────────────────────────────────────────────────────────────────
-
 document.addEventListener('DOMContentLoaded', () => {
   requestAnimationFrame(async () => {
     try {
       createSVG();
       buildProjection();
-      setupZoom();   // ← после createSVG, до loadData
+      setupZoom();
       bindUI();
       await loadData();
     } catch (err) {
