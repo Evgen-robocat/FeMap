@@ -1,45 +1,38 @@
 <!DOCTYPE html>
 <!--
   Файл    : frontend/index.html
-  Версия  : 4.0.5
-  Дата    : 2026-04-18
+  Версия  : 4.1.2
+  Дата    : 2026-04-19
   Автор   : Claude Sonnet 4.6 (Anthropic)
-  Изменения: убраны пресеты Москва и Киев
 -->
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Азимутальная проекция — FlatEarthMap</title>
-  <link rel="stylesheet" href="static/style.css">
+  <title>FlatEarthMap v4.1.2</title>
+  <link rel="stylesheet" href="static/style.css?v=12">
 </head>
 <body>
-
   <div id="controls">
-
-    <h2 class="panel-title">Азимутальная<br>проекция</h2>
-
-    <!-- Широта -->
+    <h2 class="panel-title">
+      AE Map <span class="version-badge">v4.1.2</span>
+    </h2>
     <div class="control-group">
       <label for="inp-lat">Широта центра</label>
       <div class="input-row">
         <input type="text" inputmode="decimal" id="inp-lat"
-               value="90" placeholder="−90 … 90" autocomplete="off">
+               value="90" placeholder="−90…90" autocomplete="off">
         <button class="btn-sign" data-target="inp-lat" title="Инвертировать знак">±</button>
       </div>
     </div>
-
-    <!-- Долгота -->
     <div class="control-group">
       <label for="inp-lon">Долгота центра</label>
       <div class="input-row">
         <input type="text" inputmode="decimal" id="inp-lon"
-               value="0" placeholder="−180 … 180" autocomplete="off">
+               value="0" placeholder="−180…180" autocomplete="off">
         <button class="btn-sign" data-target="inp-lon" title="Инвертировать знак">±</button>
       </div>
     </div>
-
-    <!-- Сетка -->
     <div class="control-group checkbox-group">
       <label class="checkbox-label">
         <input type="checkbox" id="chk-grid" checked>
@@ -47,8 +40,6 @@
         Сетка 30°
       </label>
     </div>
-
-    <!-- Подписи -->
     <div class="control-group checkbox-group">
       <label class="checkbox-label">
         <input type="checkbox" id="chk-labels">
@@ -56,24 +47,18 @@
         Подписи координат
       </label>
     </div>
-
     <button id="btn-apply" class="btn-primary">▶ Применить</button>
-
-    <!-- Быстрые точки — только 3 -->
     <div class="presets">
       <p class="presets-title">Быстрые точки</p>
       <button class="btn-preset" data-lat="90"  data-lon="0">Северный полюс</button>
       <button class="btn-preset" data-lat="-90" data-lon="0">Южный полюс</button>
       <button class="btn-preset" data-lat="0"   data-lon="0">Экватор / 0°</button>
+      <button class="btn-preset" id="btn-reset-zoom">⊙ Сброс зума</button>
     </div>
-
     <div id="status" class="status-bar">Инициализация…</div>
-
   </div>
-
   <div id="map"></div>
-
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="static/map.js"></script>
+  <script src="static/map.js?v=12"></script>
 </body>
 </html>
