@@ -1,0 +1,12 @@
+# FeMap — render.yaml | v3.0
+# Статический сайт — никогда не засыпает, отдаётся мгновенно
+
+services:
+  - type: static
+    name: femap
+    buildCommand: echo "No build step"
+    staticPublishPath: ./frontend
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache

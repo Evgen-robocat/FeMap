@@ -1,0 +1,457 @@
+/*
+ * =============================================================
+ * FlatEarthMap — Стили приложения
+ * =============================================================
+ * Файл    : frontend/static/style.css
+ * Версия  : 4.0.3
+ * Дата    : 2026-04-18
+ * Автор   : Claude Sonnet 4.6 (Anthropic)
+ *
+ * Изменения v4.0.3:
+ *   - Мобильная раскладка (< 640px): ВАРИАНТ Б
+ *       карта  → flex:1 (занимает всё свободное место, order:1)
+ *       панель → flex:0 0 210px фиксированная снизу, order:2
+ *     Было: карта 52vh / панель 48vh — инвертировано!
+ *   - Добавлены стили .input-row и .btn-sign для кнопок ±
+ *
+ * Раскладка десктоп: Flexbox горизонтальная.
+ *   #controls (260px) | #map (flex:1)
+ * =============================================================
+ */
+
+/* ============================================================
+   CSS-переменные — палитра и шрифты
+   ============================================================ */
+:root {
+  --bg-app:        #060e16;
+  --bg-panel:      #0d1b2a;
+  --bg-panel-dark: #091320;
+  --bg-input:      #0f2235;
+  --border:        #1e3a4a;
+  --border-focus:  #2a6080;
+  --text-primary:  #c8d8e4;
+  --text-muted:    #5a7a8a;
+  --text-label:    #7a9aaa;
+  --accent:        #2a8cba;
+  --accent-hover:  #33a8e0;
+  --accent-dim:    #1a5c7a;
+  --preset-bg:     #0f2235;
+  --preset-hover:  #162d42;
+  --status-bg:     #091520;
+  --font-mono:     'Courier New', Courier, monospace;
+  --font-ui:       'Segoe UI', system-ui, sans-serif;
+}
+
+/* ============================================================
+   Сброс и базовые стили
+   ============================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin:     0;
+  padding:    0;
+}
+
+html, body {
+  width:       100%;
+  height:      100%;
+  overflow:    hidden;
+  background:  var(--bg-app);
+  color:       var(--text-primary);
+  font-family: var(--font-ui);
+  font-size:   14px;
+  line-height: 1.4;
+}
+
+/* ============================================================
+   Основная раскладка: панель слева + карта справа (десктоп)
+   ============================================================ */
+body {
+  display:        flex;
+  flex-direction: row;
+}
+
+/* ============================================================
+   #controls — левая панель (десктоп)
+   ============================================================ */
+#controls {
+  width:        260px;
+  min-width:    220px;
+  height:       100vh;
+  padding:      20px 16px;
+  background:   var(--bg-panel);
+  border-right: 1px solid var(--border);
+  box-shadow:   2px 0 16px rgba(0, 0, 0, 0.5);
+  overflow-y:   auto;
+  flex-shrink:  0;
+
+  display:        flex;
+  flex-direction: column;
+  gap:            14px;
+}
+
+/* Заголовок панели */
+.panel-title {
+  font-size:      12px;
+  font-family:    var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color:          var(--accent);
+  padding-bottom: 14px;
+  border-bottom:  1px solid var(--border);
+  line-height:    1.6;
+}
+
+/* ============================================================
+   Группа управления: label + input(-row)
+   ============================================================ */
+.control-group {
+  display:        flex;
+  flex-direction: column;
+  gap:            5px;
+}
+
+.control-group label {
+  font-size:      11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color:          var(--text-label);
+}
+
+/* ─── Строка ввода с кнопкой ± ─────────────────────────────
+   Обёртка для <input> + <button class="btn-sign">.
+   flex-строка: input растягивается, кнопка фиксированная.
+   ─────────────────────────────────────────────────────────── */
+.input-row {
+  display:     flex;
+  gap:         6px;
+  align-items: stretch;   /* кнопка той же высоты что и input */
+}
+
+/* Инпут внутри .input-row занимает всё доступное место */
+.input-row input {
+  flex: 1 1 auto;
+  min-width: 0;           /* без этого flex-child не сжимается */
+}
+
+/* Кнопка инверсии знака */
+.btn-sign {
+  flex-shrink:    0;
+  width:          34px;
+  padding:        0;
+  background:     var(--bg-input);
+  border:         1px solid var(--border);
+  border-radius:  4px;
+  color:          var(--text-label);
+  font-size:      18px;
+  line-height:    1;
+  cursor:         pointer;
+  transition:     background 0.12s, color 0.12s, border-color 0.12s;
+  user-select:    none;
+  /* Центрируем символ ± */
+  display:        flex;
+  align-items:    center;
+  justify-content: center;
+}
+.btn-sign:hover {
+  background:   var(--preset-hover);
+  color:        var(--text-primary);
+  border-color: var(--border-focus);
+}
+.btn-sign:active {
+  transform: scale(0.94);
+}
+/* ─────────────────────────────────────────────────────────── */
+
+/* Текстовые поля ввода (type="text" inputmode="decimal") */
+.control-group input[type="text"] {
+  width:         100%;
+  padding:       8px 10px;
+  background:    var(--bg-input);
+  border:        1px solid var(--border);
+  border-radius: 4px;
+  color:         var(--text-primary);
+  font-family:   var(--font-mono);
+  font-size:     13px;
+  outline:       none;
+  transition:    border-color 0.15s;
+}
+.control-group input[type="text"]:focus {
+  border-color: var(--border-focus);
+}
+
+/* Оставляем совместимость если где-то остался type="number" */
+.control-group input[type="number"] {
+  width:         100%;
+  padding:       8px 10px;
+  background:    var(--bg-input);
+  border:        1px solid var(--border);
+  border-radius: 4px;
+  color:         var(--text-primary);
+  font-family:   var(--font-mono);
+  font-size:     13px;
+  outline:       none;
+  transition:    border-color 0.15s;
+  -moz-appearance: textfield;
+}
+.control-group input[type="number"]::-webkit-inner-spin-button,
+.control-group input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+}
+.control-group input[type="number"]:focus {
+  border-color: var(--border-focus);
+}
+
+/* ============================================================
+   Чекбоксы — кастомные
+   ============================================================ */
+.checkbox-group {
+  flex-direction: row;
+  align-items:    center;
+}
+
+.checkbox-label {
+  display:     flex;
+  align-items: center;
+  gap:         10px;
+  cursor:      pointer;
+  user-select: none;
+  font-size:   13px;
+  color:       var(--text-primary);
+}
+
+.checkbox-label input[type="checkbox"] {
+  position: absolute;
+  opacity:  0;
+  width:    0;
+  height:   0;
+}
+
+.checkbox-custom {
+  width:         16px;
+  height:        16px;
+  flex-shrink:   0;
+  border:        1px solid var(--border-focus);
+  border-radius: 3px;
+  background:    var(--bg-input);
+  position:      relative;
+  transition:    background 0.15s;
+}
+
+.checkbox-label input:checked + .checkbox-custom {
+  background:   var(--accent);
+  border-color: var(--accent);
+}
+.checkbox-label input:checked + .checkbox-custom::after {
+  content:     '';
+  position:    absolute;
+  left:        4px;
+  top:         1px;
+  width:       5px;
+  height:      9px;
+  border:      2px solid #fff;
+  border-top:  none;
+  border-left: none;
+  transform:   rotate(45deg);
+}
+
+/* ============================================================
+   Кнопка "Применить"
+   ============================================================ */
+.btn-primary {
+  width:          100%;
+  padding:        10px;
+  background:     var(--accent-dim);
+  border:         1px solid var(--accent);
+  border-radius:  4px;
+  color:          var(--text-primary);
+  font-size:      13px;
+  font-family:    var(--font-mono);
+  letter-spacing: 0.05em;
+  cursor:         pointer;
+  transition:     background 0.15s, border-color 0.15s;
+  text-align:     center;
+}
+.btn-primary:hover  { background: var(--accent); border-color: var(--accent-hover); }
+.btn-primary:active { transform: scale(0.98); }
+
+/* ============================================================
+   Быстрые точки
+   ============================================================ */
+.presets {
+  display:        flex;
+  flex-direction: column;
+  gap:            5px;
+}
+
+.presets-title {
+  font-size:      11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color:          var(--text-muted);
+  margin-bottom:  3px;
+}
+
+.btn-preset {
+  padding:        7px 10px;
+  background:     var(--preset-bg);
+  border:         1px solid var(--border);
+  border-radius:  3px;
+  color:          var(--text-label);
+  font-size:      12px;
+  font-family:    var(--font-mono);
+  cursor:         pointer;
+  text-align:     left;
+  transition:     background 0.12s, color 0.12s, border-color 0.12s;
+}
+.btn-preset:hover {
+  background:   var(--preset-hover);
+  color:        var(--text-primary);
+  border-color: var(--border-focus);
+}
+
+/* ============================================================
+   Строка статуса
+   ============================================================ */
+.status-bar {
+  margin-top:    auto;
+  padding:       8px 10px;
+  background:    var(--status-bg);
+  border:        1px solid var(--border);
+  border-radius: 3px;
+  font-family:   var(--font-mono);
+  font-size:     11px;
+  color:         var(--text-muted);
+  white-space:   nowrap;
+  overflow:      hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================
+   #map — правая область карты (десктоп)
+   ============================================================ */
+#map {
+  flex:       1;
+  height:     100vh;
+  background: #060e16;
+  position:   relative;
+  overflow:   hidden;
+}
+
+#map svg {
+  display: block;
+}
+
+/* ============================================================
+   АДАПТИВНОСТЬ — МОБИЛЬНЫЙ (< 640px)
+   ВАРИАНТ Б: карта занимает всё место, панель фиксированная снизу.
+
+   Принцип:
+     body → flex-column
+     #map      order:1, flex:1 1 auto  → занимает ВСЁ свободное место
+     #controls order:2, flex:0 0 210px → строго 210px, не растягивается
+
+   Было в v4.0.1:
+     #map:      height: 52vh   ← маленькая
+     #controls: max-height: 48vh ← почти половина экрана!
+   ============================================================ */
+@media (max-width: 640px) {
+
+  body {
+    flex-direction: column;
+    overflow:       hidden;    /* страница не скроллится */
+  }
+
+  /* ── Карта — главный контент, занимает всё свободное место ── */
+  #map {
+    order:      1;             /* идёт первой — вверху */
+    flex:       1 1 auto;      /* растягивается */
+    min-height: 0;             /* обязательно для flex-child с overflow */
+    width:      100%;
+    height:     auto;          /* сбрасываем фиксированный 100vh */
+  }
+
+  /* ── Панель управления — фиксированная полоса снизу ── */
+  #controls {
+    order:          2;         /* идёт второй — внизу */
+    flex:           0 0 210px; /* строго 210px, не сжимается и не растягивается */
+    width:          100%;
+    height:         210px;
+    min-width:      unset;
+    border-right:   none;
+    border-top:     1px solid var(--border);
+    box-shadow:     0 -2px 16px rgba(0, 0, 0, 0.5);
+    overflow-y:     auto;      /* скролл если содержимое не влезает */
+    padding:        8px 12px;
+
+    /* На мобильном — горизонтальная упаковка элементов */
+    flex-direction: row;
+    flex-wrap:      wrap;
+    gap:            8px;
+    align-content:  flex-start;
+  }
+
+  /* Заголовок — во всю ширину, компактный */
+  .panel-title {
+    width:          100%;
+    font-size:      10px;
+    padding-bottom: 6px;
+    margin-bottom:  0;
+  }
+
+  /* Поля широты/долготы — рядом, каждое примерно в полширины */
+  .control-group {
+    flex:      1 1 140px;      /* растягивается, минимум 140px */
+    min-width: 0;
+  }
+
+  /* Строка ввода с кнопкой ± — не меняется, уже flex */
+
+  /* Чекбоксы — в одну строку */
+  .checkbox-group {
+    flex:      0 0 auto;
+    min-width: 130px;
+  }
+
+  /* Кнопка "Применить" — во всю ширину */
+  .btn-primary {
+    width:     100%;
+    flex:      1 1 100%;
+    padding:   7px;
+  }
+
+  /* Быстрые точки — горизонтально, с переносом */
+  .presets {
+    width:          100%;
+    flex:           1 1 100%;
+    flex-direction: row;
+    flex-wrap:      wrap;
+    gap:            4px;
+  }
+
+  .presets-title { width: 100%; }
+
+  .btn-preset {
+    flex:       1 1 auto;
+    min-width:  80px;
+    padding:    5px 8px;
+    font-size:  11px;
+    text-align: center;
+  }
+
+  /* Статус-строка — во всю ширину, прижата к низу панели */
+  .status-bar {
+    width:      100%;
+    flex:       1 1 100%;
+    margin-top: auto;
+    font-size:  10px;
+    padding:    5px 8px;
+  }
+}
+
+/* ============================================================
+   Скроллбар панели — тёмная тема
+   ============================================================ */
+#controls::-webkit-scrollbar       { width: 4px; }
+#controls::-webkit-scrollbar-track { background: var(--bg-panel-dark); }
+#controls::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+#controls::-webkit-scrollbar-thumb:hover { background: var(--border-focus); }
