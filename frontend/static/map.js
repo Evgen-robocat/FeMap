@@ -1,8 +1,13 @@
 /**
  * Файл    : frontend/static/map.js
- * Версия  : 4.2.0
+ * Версия  : 4.2.1
  * Дата    : 2026-04-20
  * Автор   : Claude Sonnet 4.6 (Anthropic)
+ *
+ * ИЗМЕНЕНИЯ v4.2.1:
+ *   - Подпись с расстоянием смещается перпендикулярно линии на 22px.
+ *     Больше не закрывает маркеры A/B при коротких отрезках.
+ *     Если линия вырождена (< 2px) — смещение вверх по умолчанию.
  *
  * ИЗМЕНЕНИЯ v4.2.0:
  *   - Линейка расстояний: чекбокс «📏 Линейка», два клика = точки A и B.
@@ -143,7 +148,7 @@ async function loadData() {
     ]);
     const nL = state.land?.features?.length ?? 0;
     const nB = state.borders?.features?.length ?? 0;
-    setStatus(`v4.2.0 · ${nL} полигонов · ${nB} границ`);
+    setStatus(`v4.2.1 · ${nL} полигонов · ${nB} границ`);
   } catch (err) {
     console.error('[map.js] Ошибка загрузки:', err);
     state.land = state.borders = { type: 'FeatureCollection', features: [] };
@@ -271,13 +276,32 @@ function renderRuler() {
       .text(label);
   });
 
-  // Подпись с расстояниями посередине линии
+  // Подпись с расстояниями: смещена перпендикулярно линии на LABEL_OFFSET px
   if (
     screenPts.length === 2 && screenPts[0] && screenPts[1] &&
     state.ruler.distSphere !== null
   ) {
-    const mx = (screenPts[0][0] + screenPts[1][0]) / 2;
-    const my = (screenPts[0][1] + screenPts[1][1]) / 2;
+    const LABEL_OFFSET = 22; // px, перпендикуляр от линии
+
+    // Середина отрезка
+    const mx0 = (screenPts[0][0] + screenPts[1][0]) / 2;
+    const my0 = (screenPts[0][1] + screenPts[1][1]) / 2;
+
+    // Единичный вектор вдоль линии
+    const ldx = screenPts[1][0] - screenPts[0][0];
+    const ldy = screenPts[1][1] - screenPts[0][1];
+    const len = Math.sqrt(ldx * ldx + ldy * ldy);
+
+    // Перпендикуляр (повёрнут на 90°). Если линия вырождена — смещение вверх.
+    let nx = 0, ny = -1;
+    if (len > 2) { nx = -ldy / len; ny = ldx / len; }
+
+    // Выбираем сторону: перпендикуляр всегда «вверх» относительно экрана
+    // (ny < 0 — верх экрана). Если перпендикуляр смотрит вниз — инвертируем.
+    if (ny > 0) { nx = -nx; ny = -ny; }
+
+    const mx = mx0 + nx * LABEL_OFFSET;
+    const my = my0 + ny * LABEL_OFFSET;
 
     const sphereKm = Math.round(state.ruler.distSphere);
     const aeKm     = Math.round(state.ruler.distAE);
@@ -458,7 +482,7 @@ function bindUI() {
       state.ruler.distAE     = null;
       renderRuler();
       setStatus(
-        `v4.2.0 · ${state.land?.features?.length ?? 0} полигонов · ` +
+        `v4.2.1 · ${state.land?.features?.length ?? 0} полигонов · ` +
         `${state.borders?.features?.length ?? 0} границ`
       );
     } else {
