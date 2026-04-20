@@ -1,25 +1,23 @@
 <!DOCTYPE html>
 <!--
   Файл    : frontend/index.html
-  Версия  : 4.2.0
+  Версия  : 4.5.9
   Дата    : 2026-04-20
-  Автор   : Claude Sonnet 4.6 (Anthropic)
-
-  ИЗМЕНЕНИЯ v4.2.0:
-    - Добавлен чекбокс «📏 Линейка расстояний»
+  Автор   : Евгений / Claude
 -->
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FlatEarthMap v4.2.0</title>
-  <link rel="stylesheet" href="static/style.css?v=14">
+  <title>FlatEarthMap v4.5.9</title>
+  <link rel="stylesheet" href="static/style.css?v=39">
 </head>
 <body>
   <div id="controls">
     <h2 class="panel-title">
-      AE Map <span class="version-badge">v4.2.0</span>
+      AE Map <span class="version-badge">v4.5.9</span>
     </h2>
+
     <div class="control-group">
       <label for="inp-lat">Широта центра</label>
       <div class="input-row">
@@ -36,39 +34,76 @@
         <button class="btn-sign" data-target="inp-lon" title="Инвертировать знак">±</button>
       </div>
     </div>
+
+    <button id="btn-apply" class="btn-primary">▶ Применить центр</button>
+
+    <div class="presets">
+      <button class="btn-preset" data-lat="90"  data-lon="0">Сев. полюс</button>
+      <button class="btn-preset" data-lat="-90" data-lon="0">Юж. полюс</button>
+      <button class="btn-preset" data-lat="0"   data-lon="0">Экватор / 0,0</button>
+      <button id="btn-reset-zoom" class="btn-preset" style="background:#2a4a6a;">⊙ Сброс зума</button>
+    </div>
+
     <div class="control-group checkbox-group">
       <label class="checkbox-label">
         <input type="checkbox" id="chk-grid" checked>
         <span class="checkbox-custom"></span>
         Сетка 30°
       </label>
-    </div>
-    <div class="control-group checkbox-group">
       <label class="checkbox-label">
         <input type="checkbox" id="chk-labels">
         <span class="checkbox-custom"></span>
         Подписи координат
       </label>
-    </div>
-    <div class="control-group checkbox-group">
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-cities" checked>
+        <span class="checkbox-custom"></span>
+        🏙 Города и метки
+      </label>
       <label class="checkbox-label">
         <input type="checkbox" id="chk-ruler">
         <span class="checkbox-custom"></span>
         📏 Линейка расстояний
       </label>
     </div>
-    <button id="btn-apply" class="btn-primary">▶ Применить</button>
-    <div class="presets">
-      <p class="presets-title">Быстрые точки</p>
-      <button class="btn-preset" data-lat="90"  data-lon="0">Северный полюс</button>
-      <button class="btn-preset" data-lat="-90" data-lon="0">Южный полюс</button>
-      <button class="btn-preset" data-lat="0"   data-lon="0">Экватор / 0°</button>
-      <button class="btn-preset" id="btn-reset-zoom">⊙ Сброс зума</button>
+
+    <div class="user-points-form">
+      <h3>Управление точками</h3>
+      <div class="control-group">
+        <input type="text" id="add-name"
+               placeholder="Название города или объекта"
+               style="width:100%; box-sizing:border-box; border-radius:6px;">
+      </div>
+      <div class="control-group" style="margin-top:6px;">
+        <div class="input-row">
+          <input type="text" inputmode="decimal" id="add-lat" placeholder="Широта">
+          <button class="btn-sign" data-target="add-lat" title="Инвертировать знак">±</button>
+        </div>
+      </div>
+      <div class="control-group" style="margin-top:6px;">
+        <div class="input-row">
+          <input type="text" inputmode="decimal" id="add-lon" placeholder="Долгота">
+          <button class="btn-sign" data-target="add-lon" title="Инвертировать знак">±</button>
+        </div>
+      </div>
+      <button id="btn-add-point" class="btn-primary btn-add-point"
+              style="margin-top:10px;">+ Добавить на карту</button>
+
+      <div id="points-manager" class="points-manager">
+        <p class="presets-title" style="margin-top:12px;">Список активных точек</p>
+        <ul id="points-list" class="points-list"></ul>
+      </div>
     </div>
+
     <div id="status" class="status-bar">Инициализация…</div>
   </div>
-  <div id="map"></div>
+
+  <div id="map">
+    <button id="btn-ruler-map" class="map-overlay-btn"
+            title="Включить/выключить линейку">📏</button>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="static/map.js?v=15"></script>
+  <script src="static/map.js?v=43"></script>
 </body>
 </html>
