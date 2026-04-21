@@ -1,10 +1,10 @@
 /**
  * Файл    : frontend/static/map.js
- * Версия  : 4.6.0
+ * Версия  : 4.6.1
  * Дата    : 2026-04-21
  * Автор   : Евгений / Claude
  *
- * ИЗМЕНЕНИЯ v4.6.0:
+ * ИЗМЕНЕНИЯ v4.6.1:
  *   - Мультиязычность RU / EN / DE: объект LANG, функция applyLang()
  *   - Кнопки RU/EN/DE в шапке панели, выбор сохраняется в localStorage (femap_lang)
  *   - Переводы: все подписи UI, названия городов (поле names{}), линейка, статус
@@ -12,6 +12,9 @@
  */
 
 'use strict';
+
+// Версия берётся из ver.js (window.FEMAP_VERSION). Фолбэк — для локального сервера.
+const VERSION = window.FEMAP_VERSION || '4.6.1';
 
 /* ═══════════════════════════════════════════════════════════════
    ЦВЕТА
@@ -345,7 +348,9 @@ async function loadData() {
     const nL = state.land.features.length;
     const nB = state.borders?.features?.length ?? 0;
     const t  = LANG[state.lang];
-    setStatus(`v4.6.0 · ${nL} ${t.polygons} · ${nB} ${t.bordersCount}`);
+    const b = window.FEMAP_BUILD || {};
+    const buildInfo = b.map ? ` · js:${b.map} css:${b.css} html:${b.html}` : '';
+    setStatus(`v${VERSION}${buildInfo} · ${nL} ${t.polygons} · ${nB} ${t.bordersCount}`);
   } catch (err) {
     console.error('[map.js] Ошибка загрузки:', err);
     state.land = state.borders = { type: 'FeatureCollection', features: [] };
@@ -705,6 +710,8 @@ function applyCenter(lat, lon) {
   if (state.zoom) state.svg.call(state.zoom.transform, d3.zoomIdentity);
 
   buildProjection();
+  // Пересчитать линейку — distAE зависит от проекции, меняется при смене центра
+  calculateRulerDistances();
   render();
 }
 
@@ -727,7 +734,7 @@ function toggleRuler(active) {
     state.ruler.distAE     = null;
     renderRuler();
     const t = LANG[state.lang];
-    setStatus(`v4.6.0 · ${state.land?.features?.length ?? 0} ${t.polygons}`);
+    setStatus(`v${VERSION} · ${state.land?.features?.length ?? 0} ${t.polygons}`);
   } else {
     setStatus(LANG[state.lang].rulerClickA);
   }
@@ -738,7 +745,15 @@ function toggleRuler(active) {
 /* ═══════════════════════════════════════════════════════════════
    ИНИЦИАЛИЗАЦИЯ
 ═══════════════════════════════════════════════════════════════ */
-window.addEventListener('DOMContentLoaded', async () => {
+// DOMContentLoaded может уже сработать к моменту загрузки map.js
+// (если map.js грузится динамически через ver.js).
+// Поэтому проверяем readyState — и вызываем init() сразу или ждём события.
+async function init() {
+  // Вписать версию в DOM (title и badge заполняются здесь, не в HTML)
+  document.title = `FlatEarthMap v${VERSION}`;
+  const badge = document.querySelector('.version-badge');
+  if (badge) badge.textContent = `v${VERSION}`;
+
   createSVG();
   setupZoom();
   buildProjection();
@@ -822,10 +837,17 @@ window.addEventListener('DOMContentLoaded', async () => {
       const t  = LANG[state.lang];
       const nL = state.land?.features?.length ?? 0;
       const nB = state.borders?.features?.length ?? 0;
-      setStatus(`v4.6.0 · ${nL} ${t.polygons} · ${nB} ${t.bordersCount}`);
+      setStatus(`v${VERSION} · ${nL} ${t.polygons} · ${nB} ${t.bordersCount}`);
     });
   });
 
   // Применить язык при старте
   applyLang();
-});
+}
+
+// Запуск
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}

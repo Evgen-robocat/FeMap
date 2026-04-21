@@ -1,109 +1,115 @@
 <!DOCTYPE html>
 <!--
   Файл    : frontend/index.html
-  Версия  : 4.5.9
-  Дата    : 2026-04-20
+  Версия  : 1.0.0  ← НЕ МЕНЯТЬ. Версии JS/CSS хранятся в ver.js.
   Автор   : Евгений / Claude
+
+  Этот файл не содержит версий map.js и style.css.
+  Все кэш-параметры управляются через static/ver.js.
+  Менять index.html нужно только при изменении структуры HTML.
 -->
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FlatEarthMap v4.5.9</title>
-  <link rel="stylesheet" href="static/style.css?v=39">
+  <title>FlatEarthMap</title>
+  <!-- ver.js маленький, без ?v= — браузер берёт свежий при каждом деплое -->
+  <script src="static/ver.js"></script>
 </head>
 <body>
   <div id="controls">
     <h2 class="panel-title">
-      AE Map <span class="version-badge">v4.5.9</span>
+      <span>AE Map <span class="version-badge">…</span></span>
+      <span class="lang-switcher">
+        <button class="btn-lang" data-lang="ru">RU</button>
+        <button class="btn-lang" data-lang="en">EN</button>
+        <button class="btn-lang" data-lang="de">DE</button>
+      </span>
     </h2>
-
     <div class="control-group">
-      <label for="inp-lat">Широта центра</label>
+      <label for="inp-lat" data-i18n="latLabel">Широта центра</label>
       <div class="input-row">
         <input type="text" inputmode="decimal" id="inp-lat"
                value="90" placeholder="−90…90" autocomplete="off">
-        <button class="btn-sign" data-target="inp-lat" title="Инвертировать знак">±</button>
+        <button class="btn-sign" data-target="inp-lat" title="±">±</button>
       </div>
     </div>
     <div class="control-group">
-      <label for="inp-lon">Долгота центра</label>
+      <label for="inp-lon" data-i18n="lonLabel">Долгота центра</label>
       <div class="input-row">
         <input type="text" inputmode="decimal" id="inp-lon"
                value="0" placeholder="−180…180" autocomplete="off">
-        <button class="btn-sign" data-target="inp-lon" title="Инвертировать знак">±</button>
+        <button class="btn-sign" data-target="inp-lon" title="±">±</button>
       </div>
     </div>
-
-    <button id="btn-apply" class="btn-primary">▶ Применить центр</button>
-
+    <button id="btn-apply" class="btn-primary" data-i18n="applyBtn">▶ Применить центр</button>
     <div class="presets">
-      <button class="btn-preset" data-lat="90"  data-lon="0">Сев. полюс</button>
-      <button class="btn-preset" data-lat="-90" data-lon="0">Юж. полюс</button>
-      <button class="btn-preset" data-lat="0"   data-lon="0">Экватор / 0,0</button>
-      <button id="btn-reset-zoom" class="btn-preset" style="background:#2a4a6a;">⊙ Сброс зума</button>
+      <button class="btn-preset" data-lat="90"  data-lon="0"  data-i18n="presetN">Сев. полюс</button>
+      <button class="btn-preset" data-lat="-90" data-lon="0"  data-i18n="presetS">Юж. полюс</button>
+      <button class="btn-preset" data-lat="0"   data-lon="0"  data-i18n="presetEq">Экватор / 0,0</button>
+      <button id="btn-reset-zoom" class="btn-preset"
+              style="background:#2a4a6a;" data-i18n="resetZoom">⊙ Сброс зума</button>
     </div>
-
     <div class="control-group checkbox-group">
       <label class="checkbox-label">
         <input type="checkbox" id="chk-grid" checked>
         <span class="checkbox-custom"></span>
-        Сетка 30°
+        <span data-i18n="gridChk">Сетка 30°</span>
       </label>
       <label class="checkbox-label">
         <input type="checkbox" id="chk-labels">
         <span class="checkbox-custom"></span>
-        Подписи координат
+        <span data-i18n="labelsChk">Подписи координат</span>
       </label>
       <label class="checkbox-label">
         <input type="checkbox" id="chk-cities" checked>
         <span class="checkbox-custom"></span>
-        🏙 Города и метки
+        <span data-i18n="citiesChk">🏙 Города и метки</span>
       </label>
       <label class="checkbox-label">
         <input type="checkbox" id="chk-ruler">
         <span class="checkbox-custom"></span>
-        📏 Линейка расстояний
+        <span data-i18n="rulerChk">📏 Линейка расстояний</span>
       </label>
     </div>
-
     <div class="user-points-form">
-      <h3>Управление точками</h3>
+      <h3 data-i18n="pointsTitle">Управление точками</h3>
       <div class="control-group">
         <input type="text" id="add-name"
+               data-i18n-placeholder="pointsName"
                placeholder="Название города или объекта"
                style="width:100%; box-sizing:border-box; border-radius:6px;">
       </div>
       <div class="control-group" style="margin-top:6px;">
         <div class="input-row">
-          <input type="text" inputmode="decimal" id="add-lat" placeholder="Широта">
-          <button class="btn-sign" data-target="add-lat" title="Инвертировать знак">±</button>
+          <input type="text" inputmode="decimal" id="add-lat"
+                 data-i18n-placeholder="pointsLat"
+                 placeholder="Широта">
+          <button class="btn-sign" data-target="add-lat" title="±">±</button>
         </div>
       </div>
       <div class="control-group" style="margin-top:6px;">
         <div class="input-row">
-          <input type="text" inputmode="decimal" id="add-lon" placeholder="Долгота">
-          <button class="btn-sign" data-target="add-lon" title="Инвертировать знак">±</button>
+          <input type="text" inputmode="decimal" id="add-lon"
+                 data-i18n-placeholder="pointsLon"
+                 placeholder="Долгота">
+          <button class="btn-sign" data-target="add-lon" title="±">±</button>
         </div>
       </div>
       <button id="btn-add-point" class="btn-primary btn-add-point"
+              data-i18n="addBtn"
               style="margin-top:10px;">+ Добавить на карту</button>
-
       <div id="points-manager" class="points-manager">
-        <p class="presets-title" style="margin-top:12px;">Список активных точек</p>
+        <p class="presets-title" data-i18n="activePoints"
+           style="margin-top:12px;">Список активных точек</p>
         <ul id="points-list" class="points-list"></ul>
       </div>
     </div>
-
-    <div id="status" class="status-bar">Инициализация…</div>
+    <div id="status" class="status-bar">…</div>
   </div>
-
   <div id="map">
-    <button id="btn-ruler-map" class="map-overlay-btn"
-            title="Включить/выключить линейку">📏</button>
+    <button id="btn-ruler-map" class="map-overlay-btn" title="📏">📏</button>
   </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
-  <script src="static/map.js?v=43"></script>
+  <!-- d3 и map.js подключаются динамически из ver.js -->
 </body>
 </html>
