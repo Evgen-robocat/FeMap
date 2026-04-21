@@ -1,16 +1,21 @@
 /**
- * Файл    : public/static/map.js
- * Версия  : 4.5.9
- * Дата    : 2026-04-20
- * Автор   : Евгений / Claude
+ * Файл    : frontend/static/map.js
+ * Версия  : 4.6.0
+ * Дата    : 2026-04-21
+ * Автор   : Евгений / Claude
  *
- * ИЗМЕНЕНИЯ v4.5.9:
- *   - Исправлена координата Южного полюса (-89.9 вместо -90) во избежание артефактов проекции.
- *   - Исправлен цвет подписей городов на белый (был ошибочно задан черный).
+ * ИЗМЕНЕНИЯ v4.6.0:
+ *   - Мультиязычность RU / EN / DE: объект LANG, функция applyLang()
+ *   - Кнопки RU/EN/DE в шапке панели, выбор сохраняется в localStorage (femap_lang)
+ *   - Переводы: все подписи UI, названия городов (поле names{}), линейка, статус
+ *   - Города: поле names:{ru,en,de}; пользовательские точки — поле name (строка)
  */
 
 'use strict';
 
+/* ═══════════════════════════════════════════════════════════════
+   ЦВЕТА
+═══════════════════════════════════════════════════════════════ */
 const COLORS = {
   water:      '#1a6ba0',
   land:       '#c8a96e',
@@ -26,50 +31,167 @@ const COLORS = {
   userPoint:  '#00ffcc',
 };
 
+/* ═══════════════════════════════════════════════════════════════
+   ПЕРЕВОДЫ
+═══════════════════════════════════════════════════════════════ */
+const LANG = {
+  ru: {
+    latLabel:       'Широта центра',
+    lonLabel:       'Долгота центра',
+    applyBtn:       '▶ Применить центр',
+    gridChk:        'Сетка 30°',
+    labelsChk:      'Подписи координат',
+    citiesChk:      '🏙 Города и метки',
+    rulerChk:       '📏 Линейка расстояний',
+    pointsTitle:    'Управление точками',
+    pointsName:     'Название города или объекта',
+    pointsLat:      'Широта',
+    pointsLon:      'Долгота',
+    addBtn:         '+ Добавить на карту',
+    activePoints:   'Список активных точек',
+    presetN:        'Сев. полюс',
+    presetS:        'Юж. полюс',
+    presetEq:       'Экватор / 0,0',
+    resetZoom:      '⊙ Сброс зума',
+    rulerClickA:    '📏 Кликните точку A на карте',
+    rulerClickB:    '📏 Теперь кликните точку B',
+    rulerDone:      '📏 Замерено! Кликните снова для нового замера',
+    sphereDist:     '🌍 Сфера',
+    aeDist:         '📐 AE-карта',
+    km:             'км',
+    loading:        'Загрузка данных…',
+    initStatus:     'Инициализация…',
+    errorData:      'Ошибка данных: ',
+    polygons:       'полигонов',
+    bordersCount:   'границ',
+    addPointError:  'Введите корректное название и координаты',
+    deleteTitle:    'Удалить из списка',
+  },
+  en: {
+    latLabel:       'Center Latitude',
+    lonLabel:       'Center Longitude',
+    applyBtn:       '▶ Apply Center',
+    gridChk:        'Grid 30°',
+    labelsChk:      'Coordinate Labels',
+    citiesChk:      '🏙 Cities & Labels',
+    rulerChk:       '📏 Distance Ruler',
+    pointsTitle:    'Manage Points',
+    pointsName:     'City or object name',
+    pointsLat:      'Latitude',
+    pointsLon:      'Longitude',
+    addBtn:         '+ Add to Map',
+    activePoints:   'Active Points',
+    presetN:        'North Pole',
+    presetS:        'South Pole',
+    presetEq:       'Equator / 0,0',
+    resetZoom:      '⊙ Reset Zoom',
+    rulerClickA:    '📏 Click point A on the map',
+    rulerClickB:    '📏 Now click point B',
+    rulerDone:      '📏 Measured! Click again for new measurement',
+    sphereDist:     '🌍 Sphere',
+    aeDist:         '📐 AE Map',
+    km:             'km',
+    loading:        'Loading data…',
+    initStatus:     'Initializing…',
+    errorData:      'Data error: ',
+    polygons:       'polygons',
+    bordersCount:   'borders',
+    addPointError:  'Enter a valid name and coordinates',
+    deleteTitle:    'Remove from list',
+  },
+  de: {
+    latLabel:       'Breite Mittelpunkt',
+    lonLabel:       'Länge Mittelpunkt',
+    applyBtn:       '▶ Mitte anwenden',
+    gridChk:        'Gitter 30°',
+    labelsChk:      'Koordinatenbeschriftung',
+    citiesChk:      '🏙 Städte & Beschriftungen',
+    rulerChk:       '📏 Entfernungslineal',
+    pointsTitle:    'Punkte verwalten',
+    pointsName:     'Stadt- oder Objektname',
+    pointsLat:      'Breitengrad',
+    pointsLon:      'Längengrad',
+    addBtn:         '+ Zur Karte hinzufügen',
+    activePoints:   'Aktive Punkte',
+    presetN:        'Nordpol',
+    presetS:        'Südpol',
+    presetEq:       'Äquator / 0,0',
+    resetZoom:      '⊙ Zoom zurücksetzen',
+    rulerClickA:    '📏 Punkt A auf der Karte klicken',
+    rulerClickB:    '📏 Jetzt Punkt B klicken',
+    rulerDone:      '📏 Gemessen! Erneut klicken für neue Messung',
+    sphereDist:     '🌍 Sphäre',
+    aeDist:         '📐 AE-Karte',
+    km:             'km',
+    loading:        'Daten werden geladen…',
+    initStatus:     'Initialisierung…',
+    errorData:      'Datenfehler: ',
+    polygons:       'Polygone',
+    bordersCount:   'Grenzen',
+    addPointError:  'Bitte gültigen Namen und Koordinaten eingeben',
+    deleteTitle:    'Aus Liste entfernen',
+  },
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   ГОРОДА — поле names:{ru,en,de}; пользовательские точки имеют только name (строка)
+═══════════════════════════════════════════════════════════════ */
 const CITIES = [
-  { name: 'Киев',          lon:  30.52, lat: 50.45 },
-  { name: 'Москва',        lon:  37.62, lat: 55.76 },
-  { name: 'Ташкент',       lon:  69.24, lat: 41.30 },
-  { name: 'Лондон',        lon:  -0.13, lat: 51.51 },
-  { name: 'Пекин',         lon: 116.41, lat: 39.90 },
-  { name: 'Нью-Йорк',     lon: -74.01, lat: 40.71 },
-  { name: 'Дубай',         lon:  55.27, lat: 25.20 },
-  { name: 'Сингапур',      lon: 103.82, lat:  1.35 },
-  { name: 'Сидней',        lon: 151.21, lat:-33.87 },
-  
-  // Новые точки 
-  { name: 'Ушуайя',          lon: -68.30, lat: -54.80 },
-  { name: 'Мыс Агульяс',     lon:  20.00, lat: -34.83 },
-  { name: 'Мыс Челюскин',    lon: 104.30, lat:  77.72 },
-  { name: 'Мыс Принца Уэльского', lon:-168.10, lat: 65.61 },
-  { name: 'Мыс Байрон',      lon: 153.63, lat: -28.64 },
-  { name: 'Нордкап',         lon:  25.78, lat:  71.17 },
-  
+  { names: { ru: 'Киев',    en: 'Kyiv',      de: 'Kiew'      }, lon:  30.52, lat:  50.45 },
+  { names: { ru: 'Москва',  en: 'Moscow',    de: 'Moskau'    }, lon:  37.62, lat:  55.76 },
+  { names: { ru: 'Ташкент', en: 'Tashkent',  de: 'Taschkent' }, lon:  69.24, lat:  41.30 },
+  { names: { ru: 'Лондон',  en: 'London',    de: 'London'    }, lon:  -0.13, lat:  51.51 },
+  { names: { ru: 'Пекин',   en: 'Beijing',   de: 'Peking'    }, lon: 116.41, lat:  39.90 },
+  { names: { ru: 'Нью-Йорк',en: 'New York',  de: 'New York'  }, lon: -74.01, lat:  40.71 },
+  { names: { ru: 'Дубай',   en: 'Dubai',     de: 'Dubai'     }, lon:  55.27, lat:  25.20 },
+  { names: { ru: 'Сингапур',en: 'Singapore', de: 'Singapur'  }, lon: 103.82, lat:   1.35 },
+  { names: { ru: 'Сидней',  en: 'Sydney',    de: 'Sydney'    }, lon: 151.21, lat: -33.87 },
+
+  // Крайние точки
+  { names: { ru: 'Ушуайя',               en: 'Ushuaia',               de: 'Ushuaia'              }, lon:  -68.30, lat: -54.80 },
+  { names: { ru: 'Мыс Агульяс',          en: 'Cape Agulhas',          de: 'Kap Agulhas'          }, lon:   20.00, lat: -34.83 },
+  { names: { ru: 'Мыс Челюскин',         en: 'Cape Chelyuskin',       de: 'Kap Tscheljuskin'     }, lon:  104.30, lat:  77.72 },
+  { names: { ru: 'Мыс Принца Уэльского', en: 'Cape Prince of Wales',  de: 'Kap Prince of Wales'  }, lon: -168.10, lat:  65.61 },
+  { names: { ru: 'Мыс Байрон',           en: 'Cape Byron',            de: 'Kap Byron'            }, lon:  153.63, lat: -28.64 },
+  { names: { ru: 'Нордкап',              en: 'North Cape',            de: 'Nordkap'              }, lon:   25.78, lat:  71.17 },
+
   // Полярные станции
-  { name: 'Ст. Восток',     lon: 106.84, lat: -78.46 },
-  { name: 'Ст. Мак-Мердо',  lon: 166.67, lat: -77.85 },
-  { name: 'Ст. Амундсен-Скотт', lon: 0.00, lat: -89.90 },
-  { name: 'Ст. Беллинсгаузен',  lon: -58.96, lat: -62.20 },
-  { name: 'Ст. Мирный',     lon:  93.00, lat: -66.55 },
+  { names: { ru: 'Ст. Восток',           en: 'Vostok Station',        de: 'Station Wostok'       }, lon:  106.84, lat: -78.46 },
+  { names: { ru: 'Ст. Мак-Мердо',        en: 'McMurdo Station',       de: 'Station McMurdo'      }, lon:  166.67, lat: -77.85 },
+  { names: { ru: 'Ст. Амундсен-Скотт',   en: 'Amundsen–Scott Station',de: 'Station Amundsen-Scott'}, lon:    0.00, lat: -89.90 },
+  { names: { ru: 'Ст. Беллинсгаузен',    en: 'Bellingshausen Station',de: 'Station Bellingshausen'}, lon:  -58.96, lat: -62.20 },
+  { names: { ru: 'Ст. Мирный',           en: 'Mirny Station',         de: 'Station Mirny'        }, lon:   93.00, lat: -66.55 },
 ];
 
+/* ═══════════════════════════════════════════════════════════════
+   ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ — имя точки в текущем языке
+   Города: d.names[lang] || d.names.ru
+   Пользовательские точки: d.name (строка)
+═══════════════════════════════════════════════════════════════ */
+function pointLabel(d) {
+  if (d.names) return d.names[state.lang] || d.names.ru;
+  return d.name || '';
+}
+
 const GRID_STEP   = [30, 30];
-// v4.4.4: Используем абсолютные пути для надежности
 const LAND_URL    = '/data/land.geojson';
 const BORDERS_URL = '/data/borders.geojson';
 
 const TAP_MAX_DIST = 8;
 const TAP_MAX_MS   = 250;
 
+/* ═══════════════════════════════════════════════════════════════
+   СОСТОЯНИЕ
+═══════════════════════════════════════════════════════════════ */
 const state = {
   lat: 90, lon: 0,
   showGrid: true, showLabels: false,
-  showCities: true, showUserPoints: true, // v4.4.0: showCities теперь основная галка для всех точек
+  showCities: true, showUserPoints: true,
   land: null, borders: null,
   svg: null, projection: null, path: null,
   width: 0, height: 0,
   zoom: null,
-  points: [], // v4.4.0: Единый список точек
+  points: [],
   ruler: {
     active: false,
     points: [],
@@ -77,8 +199,42 @@ const state = {
     distAE: null,
   },
   _tapStart: null,
+  lang: localStorage.getItem('femap_lang') || 'ru',
 };
 
+/* ═══════════════════════════════════════════════════════════════
+   МУЛЬТИЯЗЫЧНОСТЬ
+═══════════════════════════════════════════════════════════════ */
+function applyLang() {
+  const t = LANG[state.lang];
+
+  // <html lang="...">
+  document.documentElement.lang = state.lang;
+
+  // Текстовые узлы через data-i18n
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.dataset.i18n;
+    if (t[key] !== undefined) el.textContent = t[key];
+  });
+
+  // Placeholder-ы через data-i18n-placeholder
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.dataset.i18nPlaceholder;
+    if (t[key] !== undefined) el.placeholder = t[key];
+  });
+
+  // Подсветить активную кнопку языка
+  document.querySelectorAll('.btn-lang').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === state.lang);
+  });
+
+  // Перерисовать названия городов на карте если проекция уже готова
+  if (state.projection) renderCities();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SVG / ZOOM
+═══════════════════════════════════════════════════════════════ */
 function createSVG() {
   const container = document.getElementById('map');
   state.width  = container.clientWidth;
@@ -93,7 +249,6 @@ function createSVG() {
   ['water','land','borders','grid','border'].forEach(id =>
     mapContent.append('g').attr('id', 'layer-' + id)
   );
-  // Слой overlay для элементов, которые НЕ должны масштабироваться (подписи, города, точки, линейка)
   ['labels','cities','userpoints','ruler'].forEach(id =>
     state.svg.append('g').attr('id', 'layer-' + id)
   );
@@ -115,8 +270,7 @@ function setupZoom() {
     .on('zoom', (event) => {
       state.svg.select('#map-content')
         .attr('transform', event.transform);
-      // v4.3.4: Перерисовываем весь оверлей при зуме, так как он вне группы трансформации
-      renderLabels(); 
+      renderLabels();
       renderCities();
       renderUserPoints();
       renderRuler();
@@ -149,29 +303,31 @@ function buildProjection() {
   state.path = d3.geoPath(state.projection);
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ЗАГРУЗКА ДАННЫХ
+═══════════════════════════════════════════════════════════════ */
 async function loadData() {
-  setStatus('Загрузка данных...');
-  
-  // v4.4.0: Загрузка точек
+  setStatus(LANG[state.lang].loading);
+
   try {
     const saved = localStorage.getItem('femap_points_v5');
     if (saved) {
       state.points = JSON.parse(saved);
     } else {
-      // Пытаемся мигрировать из v4 если они были
       const oldV4 = localStorage.getItem('femap_points_v4');
       const savedV4 = oldV4 ? JSON.parse(oldV4) : null;
-      
       if (savedV4) {
-        const baseNames = new Set(CITIES.map(c => c.name));
-        const userPoints = savedV4.filter(p => !baseNames.has(p.name));
+        // При миграции из v4 сохраняем только пользовательские точки (без CITIES)
+        // CITIES теперь имеют структуру names:{}, а не name:''
+        const cityNamesRu = new Set(CITIES.map(c => c.names.ru));
+        const userPoints = savedV4.filter(p => !cityNamesRu.has(p.name));
         state.points = [...CITIES, ...userPoints];
       } else {
         state.points = [...CITIES];
       }
     }
-  } catch(e) { 
-    console.error('Ошибка загрузки точек', e); 
+  } catch(e) {
+    console.error('Ошибка загрузки точек', e);
     state.points = [...CITIES];
   }
   refreshPointsList();
@@ -181,21 +337,25 @@ async function loadData() {
       d3.json(LAND_URL).catch(e => { throw new Error('Land: ' + e.message) }),
       d3.json(BORDERS_URL).catch(e => { throw new Error('Borders: ' + e.message) })
     ]);
-    state.land = land;
+    state.land    = land;
     state.borders = borders;
 
     if (!state.land || !state.land.features) throw new Error('Invalid Land data');
 
     const nL = state.land.features.length;
     const nB = state.borders?.features?.length ?? 0;
-    setStatus(`v4.5.9 · ${nL} полигонов · ${nB} границ`);
+    const t  = LANG[state.lang];
+    setStatus(`v4.6.0 · ${nL} ${t.polygons} · ${nB} ${t.bordersCount}`);
   } catch (err) {
     console.error('[map.js] Ошибка загрузки:', err);
     state.land = state.borders = { type: 'FeatureCollection', features: [] };
-    setStatus('Ошибка данных: ' + err.message);
+    setStatus(LANG[state.lang].errorData + err.message);
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   УПРАВЛЕНИЕ ТОЧКАМИ
+═══════════════════════════════════════════════════════════════ */
 function savePoints() {
   localStorage.setItem('femap_points_v5', JSON.stringify(state.points));
 }
@@ -204,7 +364,7 @@ function deletePoint(idx) {
   state.points.splice(idx, 1);
   savePoints();
   refreshPointsList();
-  renderCities(); // Перерисовываем слой
+  renderCities();
 }
 
 function refreshPointsList() {
@@ -221,23 +381,20 @@ function refreshPointsList() {
       document.getElementById('inp-lat').value = p.lat;
       document.getElementById('inp-lon').value = p.lon;
       applyCenter(p.lat, p.lon);
-      
-      // v4.4.5: Плавный зум на центр (точка уже там благодаря applyCenter)
-      const k = 4; // Уровень приближения
+
+      const k = 4;
       const w = state.width  || window.innerWidth;
       const h = state.height || window.innerHeight;
-      
       const transform = d3.zoomIdentity
         .translate(w/2, h/2)
         .scale(k)
         .translate(-w/2, -h/2);
-      
       state.svg.transition().duration(500).call(state.zoom.transform, transform);
     };
 
     const name = document.createElement('span');
     name.className = 'point-name';
-    name.textContent = p.name;
+    name.textContent = pointLabel(p);
 
     const coords = document.createElement('span');
     coords.className = 'point-coords';
@@ -249,7 +406,7 @@ function refreshPointsList() {
     const btnDel = document.createElement('button');
     btnDel.className = 'btn-del-point';
     btnDel.innerHTML = '&times;';
-    btnDel.title = 'Удалить из списка';
+    btnDel.title = LANG[state.lang].deleteTitle;
     btnDel.onclick = (e) => {
       e.stopPropagation();
       deletePoint(idx);
@@ -267,25 +424,28 @@ function addPoint() {
   const lonInp  = document.getElementById('add-lon');
 
   const name = nameInp.value.trim();
-  const lat = parseFloat(latInp.value.replace(',', '.'));
-  const lon = parseFloat(lonInp.value.replace(',', '.'));
+  const lat  = parseFloat(latInp.value.replace(',', '.'));
+  const lon  = parseFloat(lonInp.value.replace(',', '.'));
 
   if (!name || isNaN(lat) || isNaN(lon)) {
-    alert('Введите корректное название и координаты');
+    alert(LANG[state.lang].addPointError);
     return;
   }
 
+  // Пользовательские точки хранятся как { name: string, lat, lon }
   state.points.push({ name, lat, lon });
   savePoints();
   refreshPointsList();
-  renderCities(); // Перерисовываем слой
+  renderCities();
 
-  // Очистка формы
   nameInp.value = '';
-  latInp.value = '';
-  lonInp.value = '';
+  latInp.value  = '';
+  lonInp.value  = '';
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   РЕНДЕР
+═══════════════════════════════════════════════════════════════ */
 function renderLabels() {
   const layer = state.svg.select('#layer-labels');
   layer.selectAll('*').remove();
@@ -296,7 +456,6 @@ function renderLabels() {
     const projected = state.projection([state.lon, lat]);
     if (!projected) return;
     const pt = transform.apply(projected);
-    
     layer.append('text')
       .attr('x', pt[0] + 4).attr('y', pt[1]).attr('dy', '0.35em')
       .attr('fill', '#a0d8ef').attr('font-size', '10px')
@@ -369,11 +528,11 @@ function renderMarkers(layerId, data, color, showFlag) {
 
     layer.append('text')
       .attr('x', pt[0] + 5).attr('y', pt[1] + 3)
-      .attr('fill', '#fff') // Белый шрифт
-      .attr('font-size', (k > 2 ? 12 : 0) + 'px') // Увеличено до 12px
-      .attr('font-weight', 'bold') // Жирный для читаемости
+      .attr('fill', '#fff')
+      .attr('font-size', (k > 2 ? 12 : 0) + 'px')
+      .attr('font-weight', 'bold')
       .style('pointer-events', 'none')
-      .text(d.name);
+      .text(pointLabel(d));
   });
 }
 
@@ -382,23 +541,21 @@ function renderCities() {
 }
 
 function renderUserPoints() {
-  // v4.4.0: Больше не отделяем пользовательские точки визуально в списке, 
-  // но функция оставлена для совместимости слоев если нужно
+  // Функция оставлена для совместимости слоёв
 }
 
-/**
- * ЛИНЕЙКА (RULER)
- */
+/* ═══════════════════════════════════════════════════════════════
+   ЛИНЕЙКА
+═══════════════════════════════════════════════════════════════ */
 function handleMapClick(event) {
   if (!state.ruler.active) return;
   const [mx, my] = d3.pointer(event);
-  
-  // v4.3.5: Учитываем текущий зум при клике
+
   const transform = d3.zoomTransform(state.svg.node());
   let coords = state.projection.invert(transform.invert([mx, my]));
 
-  // v4.5.1: Магнитное притяжение к городам/точкам
-  let minD = 25; // Радиус притяжения в пикселях
+  // Магнитное притяжение к городам/точкам
+  let minD = 25;
   state.points.forEach(p => {
     const proj = state.projection([p.lon, p.lat]);
     if (proj) {
@@ -416,27 +573,37 @@ function handleMapClick(event) {
     state.ruler.points.push(coords);
     calculateRulerDistances();
     renderRuler();
-    
-    if (state.ruler.points.length === 1) setStatus('📏 Теперь кликните точку B');
-    else setStatus('📏 Замерено! Можно кликнуть снова для нового замера');
+
+    if (state.ruler.points.length === 1) setStatus(LANG[state.lang].rulerClickB);
+    else                                 setStatus(LANG[state.lang].rulerDone);
   }
 }
 
 function calculateRulerDistances() {
   if (state.ruler.points.length < 2) return;
   const [p1, p2] = state.ruler.points;
-  
-  // 1. Сферическое расстояние (Haversine) - условно "шарообразное"
+
+  // ── 🌍 Расстояние по сфере (великий круг) ────────────────────────────────
+  // d3.geoDistance возвращает центральный угол в радианах.
+  // × 6371 км/рад = расстояние по поверхности шара.
+  // Не зависит от проекции и центра карты — это физическая реальность.
   state.ruler.distSphere = d3.geoDistance(p1, p2) * 6371;
 
-  // 2. Расстояние на AE проекции (плоское радиальное)
-  // На AE проекции расстояние от центра (полюса) до любой точки - масштабное.
-  // Но расстояние МЕЖДУ двумя произвольными точками - НЕ масштабное (искажено).
-  // Однако пользователи часто хотят видеть именно "линейку по листу"
-  const dLat = (p2[1] - p1[1]) * (Math.PI / 180);
-  const dLon = (p2[0] - p1[0]) * (Math.PI / 180);
-  // (Это просто упрощение для демонстрации)
-  state.ruler.distAE = Math.sqrt(dLat*dLat + dLon*dLon) * 6371;
+  // ── 📐 Расстояние по AE-карте (евклидово на плоскости) ───────────────────
+  // Берём пиксельные координаты обеих точек через текущую проекцию.
+  // projection.scale() — масштаб в пикселях/радиан (меняется с fitSize).
+  // pixelDist / scale() = угловое расстояние в радианах на плоскости карты.
+  // × 6371 = "расстояние", которое плоскоземельщик "измерил бы линейкой по карте".
+  // ВАЖНО: при смене центра проекции пиксельные координаты пересчитываются,
+  // поэтому distAE меняется — в отличие от distSphere.
+  const proj1 = state.projection(p1);
+  const proj2 = state.projection(p2);
+  if (proj1 && proj2) {
+    const pixelDist = Math.hypot(proj2[0] - proj1[0], proj2[1] - proj1[1]);
+    state.ruler.distAE = pixelDist / state.projection.scale() * 6371;
+  } else {
+    state.ruler.distAE = null;
+  }
 }
 
 function renderRuler() {
@@ -450,7 +617,6 @@ function renderRuler() {
     return proj ? transform.apply(proj) : null;
   });
 
-  // 1. Линия
   if (screenPts.length === 2 && screenPts[0] && screenPts[1]) {
     layer.append('line')
       .attr('x1', screenPts[0][0]).attr('y1', screenPts[0][1])
@@ -461,7 +627,6 @@ function renderRuler() {
       .attr('opacity', 0.9);
   }
 
-  // 2. Маркеры A и B (фиксированный размер 6px, не зависят от зума)
   screenPts.forEach((pt, i) => {
     if (!pt) return;
     const label = i === 0 ? 'A' : 'B';
@@ -484,7 +649,6 @@ function renderRuler() {
       .text(label);
   });
 
-  // 3. Плашка с расстоянием
   if (
     screenPts.length === 2 && screenPts[0] && screenPts[1] &&
     state.ruler.distSphere !== null
@@ -494,19 +658,20 @@ function renderRuler() {
 
     const ldx = screenPts[1][0] - screenPts[0][0];
     const ldy = screenPts[1][1] - screenPts[0][1];
-    const len = Math.sqrt(ldx * ldx + ldy * ldy);
+    const len = Math.sqrt(ldx*ldx + ldy*ldy);
 
     let nx = 0, ny = -1;
     if (len > 2) { nx = -ldy / len; ny = ldx / len; }
     if (ny > 0 || (ny === 0 && nx < 0)) { nx = -nx; ny = -ny; }
 
-    const bgW = 130, bgH = 34, bgPad = 4;
+    const bgW = 160, bgH = 34;
     const sphereKm = Math.round(state.ruler.distSphere);
     const aeKm     = Math.round(state.ruler.distAE);
-    
+    const t        = LANG[state.lang];
+
     const tooltip = layer.append('g')
       .attr('transform', `translate(${mx0 + nx*25}, ${my0 + ny*25})`);
-    
+
     tooltip.append('rect')
       .attr('x', -bgW/2).attr('y', -bgH/2)
       .attr('width', bgW).attr('height', bgH)
@@ -516,28 +681,28 @@ function renderRuler() {
     tooltip.append('text')
       .attr('y', -5).attr('text-anchor', 'middle')
       .attr('fill', '#fff').attr('font-size', '10px')
-      .attr('font-family', 'sans-serif') // Emoji better in sans
-      .text(`🌐 ${sphereKm.toLocaleString()} км`);
+      .attr('font-family', 'sans-serif')
+      .text(`${t.sphereDist}: ${sphereKm.toLocaleString()} ${t.km}`);
 
     tooltip.append('text')
       .attr('y', 8).attr('text-anchor', 'middle')
       .attr('fill', '#a0d8ef').attr('font-size', '10px')
       .attr('font-family', 'sans-serif')
-      .text(`📐 ${aeKm.toLocaleString()} км`);
+      .text(`${t.aeDist}: ${aeKm.toLocaleString()} ${t.km}`);
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   УТИЛИТЫ
+═══════════════════════════════════════════════════════════════ */
 function applyCenter(lat, lon) {
   if (typeof lat === 'string') lat = lat.replace(',', '.');
   if (typeof lon === 'string') lon = lon.replace(',', '.');
-  
+
   state.lat = Math.max(-90,  Math.min(90,  parseFloat(lat) || 0));
   state.lon = Math.max(-180, Math.min(180, parseFloat(lon) || 0));
 
-  // v4.4.2: Сбрасываем зум при смене центра, иначе старая трансформация уводит карту за экран
-  if (state.zoom) {
-    state.svg.call(state.zoom.transform, d3.zoomIdentity);
-  }
+  if (state.zoom) state.svg.call(state.zoom.transform, d3.zoomIdentity);
 
   buildProjection();
   render();
@@ -550,11 +715,10 @@ function setStatus(msg) {
 
 function toggleRuler(active) {
   state.ruler.active = active;
-  
-  // Синхронизация UI
-  const chk = document.getElementById('chk-ruler');
+
+  const chk    = document.getElementById('chk-ruler');
   const btnMap = document.getElementById('btn-ruler-map');
-  if (chk) chk.checked = active;
+  if (chk)    chk.checked = active;
   if (btnMap) btnMap.classList.toggle('active', active);
 
   if (!active) {
@@ -562,37 +726,47 @@ function toggleRuler(active) {
     state.ruler.distSphere = null;
     state.ruler.distAE     = null;
     renderRuler();
-    setStatus(`v4.5.9 · ${state.land?.features?.length ?? 0} полигонов`);
+    const t = LANG[state.lang];
+    setStatus(`v4.6.0 · ${state.land?.features?.length ?? 0} ${t.polygons}`);
   } else {
-    setStatus('📏 Кликните точку A на карте');
+    setStatus(LANG[state.lang].rulerClickA);
   }
-  
+
   document.getElementById('map').style.cursor = active ? 'crosshair' : '';
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ИНИЦИАЛИЗАЦИЯ
+═══════════════════════════════════════════════════════════════ */
 window.addEventListener('DOMContentLoaded', async () => {
   createSVG();
   setupZoom();
   buildProjection();
-  
+
   await loadData();
   render();
 
   state.svg.on('click', handleMapClick);
 
+  // Применить центр
   document.getElementById('btn-apply').addEventListener('click', () => {
     applyCenter(
       document.getElementById('inp-lat').value,
       document.getElementById('inp-lon').value
-    )
+    );
   });
+
+  // Добавить точку
   document.getElementById('btn-add-point').addEventListener('click', addPoint);
 
+  // Enter в полях координат
   ['inp-lat', 'inp-lon'].forEach(id =>
     document.getElementById(id).addEventListener('keydown', e => {
       if (e.key === 'Enter') document.getElementById('btn-apply').click();
     })
   );
+
+  // Кнопки ±
   document.querySelectorAll('.btn-sign').forEach(btn =>
     btn.addEventListener('click', () => {
       const inp = document.getElementById(btn.dataset.target);
@@ -601,6 +775,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (!isNaN(v) && v !== 0) inp.value = String(-v);
     })
   );
+
+  // Чекбоксы
   document.getElementById('chk-grid').addEventListener('change', e => {
     state.showGrid = e.target.checked; render();
   });
@@ -613,12 +789,13 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('chk-ruler').addEventListener('change', e => {
     toggleRuler(e.target.checked);
   });
-  
-  // v4.5.0: Кнопка на карте
+
+  // Кнопка линейки на карте
   document.getElementById('btn-ruler-map').addEventListener('click', () => {
     toggleRuler(!state.ruler.active);
   });
 
+  // Пресеты координат
   document.querySelectorAll('.btn-preset').forEach(btn =>
     btn.addEventListener('click', () => {
       const lat = parseFloat(btn.dataset.lat);
@@ -630,5 +807,25 @@ window.addEventListener('DOMContentLoaded', async () => {
       }
     })
   );
+
+  // Сброс зума
   document.getElementById('btn-reset-zoom').addEventListener('click', resetZoom);
+
+  // Переключение языка
+  document.querySelectorAll('.btn-lang').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.lang = btn.dataset.lang;
+      localStorage.setItem('femap_lang', state.lang);
+      applyLang();
+      refreshPointsList(); // Перерисовать список с новыми именами городов
+      // Обновить статус-строку
+      const t  = LANG[state.lang];
+      const nL = state.land?.features?.length ?? 0;
+      const nB = state.borders?.features?.length ?? 0;
+      setStatus(`v4.6.0 · ${nL} ${t.polygons} · ${nB} ${t.bordersCount}`);
+    });
+  });
+
+  // Применить язык при старте
+  applyLang();
 });
