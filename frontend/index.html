@@ -1,19 +1,14 @@
 <!DOCTYPE html>
 <!--
   Файл    : frontend/index.html
-  Версия  : 1.0.0  ← НЕ МЕНЯТЬ. Версии JS/CSS хранятся в ver.js.
-  Автор   : Евгений / Claude
-
-  Этот файл не содержит версий map.js и style.css.
-  Все кэш-параметры управляются через static/ver.js.
-  Менять index.html нужно только при изменении структуры HTML.
+  Версия  : 1.3.0 (HTML_V=4)
+  Изменения: добавлен day-slider (годовой ползунок)
 -->
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FlatEarthMap</title>
-  <!-- ver.js маленький, без ?v= — браузер берёт свежий при каждом деплое -->
   <script src="static/ver.js"></script>
 </head>
 <body>
@@ -50,6 +45,8 @@
       <button id="btn-reset-zoom" class="btn-preset"
               style="background:#2a4a6a;" data-i18n="resetZoom">⊙ Сброс зума</button>
     </div>
+
+    <!-- Чекбоксы карты -->
     <div class="control-group checkbox-group">
       <label class="checkbox-label">
         <input type="checkbox" id="chk-grid" checked>
@@ -72,6 +69,59 @@
         <span data-i18n="rulerChk">📏 Линейка расстояний</span>
       </label>
     </div>
+
+    <!-- Чекбоксы астрономии — ОТДЕЛЬНЫЕ -->
+    <div class="control-group checkbox-group"
+         style="border-top:1px solid #1e3a5a; padding-top:6px; margin-top:4px;">
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-sun">
+        <span class="checkbox-custom"></span>
+        <span>☀ Солнце</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-night">
+        <span class="checkbox-custom"></span>
+        <span>🌓 День / Ночь</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-moon">
+        <span class="checkbox-custom"></span>
+        <span>🌙 Луна</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-planets">
+        <span class="checkbox-custom"></span>
+        <span>🪐 Планеты</span>
+      </label>
+    </div>
+
+    <!-- Панель времени — скрыта если ни один астро-чекбокс не включён -->
+    <div id="astro-time" style="display:none; padding:4px 0;">
+      <div id="astro-display"
+           style="font-family:monospace; font-size:11px; color:#a0c4d8;
+                  text-align:center; margin-bottom:5px;">…</div>
+      <!-- Годовой ползунок (шаг 1 сутки) -->
+      <div style="display:flex; align-items:center; gap:4px; margin-bottom:3px;">
+        <span style="font-size:9px; color:#6a8a9a; min-width:26px; text-align:right;">год</span>
+        <input type="range" id="day-slider"
+               min="0" max="364" value="0" step="1"
+               style="flex:1;">
+      </div>
+      <!-- Суточный ползунок (шаг 1 минута) -->
+      <div style="display:flex; align-items:center; gap:4px; margin-bottom:5px;">
+        <span style="font-size:9px; color:#6a8a9a; min-width:26px; text-align:right;">UTC</span>
+        <input type="range" id="sun-slider"
+               min="0" max="1439" value="720" step="1"
+               style="flex:1;">
+      </div>
+      <div style="display:flex; gap:5px;">
+        <button id="btn-astro-prev" class="btn-preset" style="flex:1;padding:5px 2px;">← День</button>
+        <button id="btn-astro-play" class="btn-preset" style="flex:1;padding:5px 2px;">▶</button>
+        <button id="btn-astro-now"  class="btn-preset" style="flex:1;padding:5px 2px;">⊙ Сейчас</button>
+        <button id="btn-astro-next" class="btn-preset" style="flex:1;padding:5px 2px;">День →</button>
+      </div>
+    </div>
+
     <div class="user-points-form">
       <h3 data-i18n="pointsTitle">Управление точками</h3>
       <div class="control-group">
@@ -83,22 +133,19 @@
       <div class="control-group" style="margin-top:6px;">
         <div class="input-row">
           <input type="text" inputmode="decimal" id="add-lat"
-                 data-i18n-placeholder="pointsLat"
-                 placeholder="Широта">
+                 data-i18n-placeholder="pointsLat" placeholder="Широта">
           <button class="btn-sign" data-target="add-lat" title="±">±</button>
         </div>
       </div>
       <div class="control-group" style="margin-top:6px;">
         <div class="input-row">
           <input type="text" inputmode="decimal" id="add-lon"
-                 data-i18n-placeholder="pointsLon"
-                 placeholder="Долгота">
+                 data-i18n-placeholder="pointsLon" placeholder="Долгота">
           <button class="btn-sign" data-target="add-lon" title="±">±</button>
         </div>
       </div>
       <button id="btn-add-point" class="btn-primary btn-add-point"
-              data-i18n="addBtn"
-              style="margin-top:10px;">+ Добавить на карту</button>
+              data-i18n="addBtn" style="margin-top:10px;">+ Добавить на карту</button>
       <div id="points-manager" class="points-manager">
         <p class="presets-title" data-i18n="activePoints"
            style="margin-top:12px;">Список активных точек</p>
@@ -107,9 +154,9 @@
     </div>
     <div id="status" class="status-bar">…</div>
   </div>
+
   <div id="map">
     <button id="btn-ruler-map" class="map-overlay-btn" title="📏">📏</button>
   </div>
-  <!-- d3 и map.js подключаются динамически из ver.js -->
 </body>
 </html>

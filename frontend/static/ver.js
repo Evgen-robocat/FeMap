@@ -1,51 +1,49 @@
 /**
  * Файл    : frontend/static/ver.js
- * Автор   : Евгений / Claude
+ * Версия  : 5.2.0
  *
- * ЕДИНСТВЕННОЕ место с номерами версий всей сборки.
- * index.html грузит его без ?v= — Render отдаёт свежим при каждом деплое.
- *
- * КАК ОБНОВЛЯТЬ:
- *   Изменил map.js     → увеличь MAP_V  + APP_VERSION
- *   Изменил style.css  → увеличь CSS_V  + APP_VERSION
- *   Изменил index.html → увеличь HTML_V + APP_VERSION
- *   git add только изменённые файлы + ver.js
+ * Цепочка: d3 → map.js (сразу)
+ *          d3 → astronomy.min.js (параллельно, локально)
  */
-
 (function () {
-  var APP_VERSION = '4.6.1';  // ← общая версия сборки
-  var MAP_V       = '45';     // ← ver map.js
-  var CSS_V       = '40';     // ← ver style.css
-  var HTML_V      = '1';      // ← ver index.html (для журнала, не для кэша)
+  var APP_VERSION = '5.2.0';
+  var MAP_V       = '53';
+  var CSS_V       = '40';
+  var HTML_V      = '4';   // index.html: добавлен day-slider
 
-  // ── Подключить style.css ───────────────────────────────────────────────
   var link = document.createElement('link');
   link.rel  = 'stylesheet';
   link.href = 'static/style.css?v=' + CSS_V;
   document.head.appendChild(link);
 
-  // ── Обновить <title> ───────────────────────────────────────────────────
   document.title = 'FlatEarthMap v' + APP_VERSION;
+  window.FEMAP_VERSION = APP_VERSION;
+  window.FEMAP_BUILD   = { app: APP_VERSION, map: MAP_V, css: CSS_V, html: HTML_V };
 
-  // ── Экспортировать версии для map.js ───────────────────────────────────
-  window.FEMAP_VERSION  = APP_VERSION;
-  window.FEMAP_BUILD    = {
-    app:  APP_VERSION,
-    map:  MAP_V,
-    css:  CSS_V,
-    html: HTML_V,
-  };
-
-  // ── Подключить d3 → map.js (цепочка: map.js зависит от d3) ───────────
-  function loadScript(src, onload) {
+  function loadScript(src, onload, onerror) {
     var s = document.createElement('script');
     s.src = src;
-    if (onload) s.onload = onload;
+    if (onload)  s.onload  = onload;
+    if (onerror) s.onerror = onerror;
     document.head.appendChild(s);
   }
 
   loadScript(
     'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js',
-    function () { loadScript('static/map.js?v=' + MAP_V); }
+    function () {
+      loadScript('static/map.js?v=' + MAP_V);
+      loadScript(
+        'static/astronomy.min.js',
+        function () {
+          console.log('[ver.js] astronomy-engine загружен');
+          if (typeof window.onAstronomyReady === 'function') {
+            window.onAstronomyReady();
+          }
+        },
+        function () {
+          console.warn('[ver.js] astronomy.min.js не найден — Луна и планеты недоступны');
+        }
+      );
+    }
   );
 })();
