@@ -1,15 +1,15 @@
 /**
  * Файл    : frontend/static/ver.js
- * Версия  : 5.2.0
+ * Версия  : 5.3.0
  *
  * Цепочка: d3 → map.js (сразу)
  *          d3 → astronomy.min.js (параллельно, локально)
  */
 (function () {
-  var APP_VERSION = '5.2.0';
-  var MAP_V       = '53';
+  var APP_VERSION = '5.3.0';
+  var MAP_V       = '54';
   var CSS_V       = '40';
-  var HTML_V      = '4';   // index.html: добавлен day-slider
+  var HTML_V      = '5';   // index.html: три кнопки анимации (1ч / 24ч / ☆сут)
 
   var link = document.createElement('link');
   link.rel  = 'stylesheet';

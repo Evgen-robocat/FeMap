@@ -1,29 +1,38 @@
 /**
  * Файл    : frontend/static/map.js
- * Версия  : 5.2.0
+ * Версия  : 5.3.0
  * Автор   : Евгений / Claude
  *
+ * ИЗМЕНЕНИЯ v5.3.0:
+ *   - Три независимых режима анимации:
+ *       ▶ 1ч   — суточная (шаг +1ч,  80 мс, сутки за ~2 сек)
+ *       ▶ 24ч  — годовая  (шаг +24ч, 80 мс, год   за ~29 сек)
+ *       ▶ ☆сут — звёздные сутки (шаг 23ч 56м 4с = 86164с, 80 мс)
+ *                небесная сфера делает ровно 1 оборот — планеты
+ *                и звёзды возвращаются на то же место
+ *   - Кнопки: btn-play-hour / btn-play-day / btn-play-sidereal
+ *   - Подсказка активного режима в #astro-mode-hint
+ *   - state.astro.playMode: null | 'hour' | 'day' | 'sidereal'
+ *   - Удалён единственный btn-astro-play
+ *
  * ИЗМЕНЕНИЯ v5.2.0:
- *   - Годовой ползунок (day-slider): шаг 1 сутки, охват 1 год (Jan 1 — Dec 31)
- *   - Плей теперь идёт с шагом +24ч (годовой таймлапс, 1 год за ~29 сек)
+ *   - Годовой ползунок (day-slider): шаг 1 сутки, охват 1 год
+ *   - Плей +24ч каждые 80 мс (годовой таймлапс)
  *   - dayOfYear() — вспомогательная функция
  *   - setAstroDate() обновляет оба ползунка синхронно
  *
  * ИЗМЕНЕНИЯ v5.1.1:
- *   - БАГ-ФИКС: Луна и планеты — Astronomy.Equator не принимает null как observer.
- *     Исправлено: null → new Astronomy.Observer(0, 0, 0)
- *   - console.error в bodySubpoint (диагностика)
+ *   - БАГ-ФИКС: null → new Astronomy.Observer(0, 0, 0)
  *
  * ИЗМЕНЕНИЯ v5.1.0:
- *   - Солнце и день/ночь разделены на два чекбокса (chk-sun / chk-night)
- *   - renderNight() вызывается из renderAstro() → тень обновляется со временем
- *   - Магнит линейки: Солнце, Луна, планеты
- *   - window.onAstronomyReady: перерисовка когда astronomy-engine загрузился
+ *   - Солнце и день/ночь разделены: chk-sun / chk-night
+ *   - Магнит линейки к астро-объектам
+ *   - window.onAstronomyReady
  */
 
 'use strict';
 
-var VERSION = window.FEMAP_VERSION || '5.2.0';
+var VERSION = window.FEMAP_VERSION || '5.3.0';
 
 /* ═══════════════════════════════════════════════════════════════
    ЦВЕТА
@@ -75,6 +84,9 @@ var LANG = {
     sphereDist:'🌍 Сфера', aeDist:'📐 AE-карта', km:'км',
     loading:'Загрузка данных…', polygons:'полигонов', bordersCount:'границ',
     addPointError:'Введите название и координаты', deleteTitle:'Удалить',
+    modeHour:'суточная — шаг 1ч',
+    modeDay:'годовая — шаг 24ч',
+    modeSidereal:'звёздные сутки — шаг 23ч 56м 4с',
   },
   en: {
     latLabel:'Center Latitude', lonLabel:'Center Longitude',
@@ -91,6 +103,9 @@ var LANG = {
     sphereDist:'🌍 Sphere', aeDist:'📐 AE Map', km:'km',
     loading:'Loading data…', polygons:'polygons', bordersCount:'borders',
     addPointError:'Enter valid name and coordinates', deleteTitle:'Delete',
+    modeHour:'daily — step 1h',
+    modeDay:'annual — step 24h',
+    modeSidereal:'sidereal day — step 23h 56m 4s',
   },
   de: {
     latLabel:'Breite Mittelpunkt', lonLabel:'Länge Mittelpunkt',
@@ -107,6 +122,9 @@ var LANG = {
     sphereDist:'🌍 Sphäre', aeDist:'📐 AE-Karte', km:'km',
     loading:'Wird geladen…', polygons:'Polygone', bordersCount:'Grenzen',
     addPointError:'Bitte gültigen Namen und Koordinaten eingeben', deleteTitle:'Löschen',
+    modeHour:'täglich — Schritt 1h',
+    modeDay:'jährlich — Schritt 24h',
+    modeSidereal:'Sterntag — Schritt 23h 56m 4s',
   },
 };
 
@@ -147,6 +165,16 @@ var LAND_URL    = '/data/land.geojson';
 var BORDERS_URL = '/data/borders.geojson';
 
 /* ═══════════════════════════════════════════════════════════════
+   ШАГИ АНИМАЦИИ (миллисекунды)
+═══════════════════════════════════════════════════════════════ */
+var ANIM_STEP = {
+  hour:     1 * 60 * 60 * 1000,   // 1 час      → сутки за ~2 сек (24 кадра × 80 мс)
+  day:      24 * 60 * 60 * 1000,  // 1 сутки    → год за ~29 сек (365 кадров × 80 мс)
+  sidereal: 86164 * 1000,         // 23ч 56м 4с → звёздные сутки, небесная сфера ровно 1 оборот
+};
+var ANIM_INTERVAL_MS = 80;         // интервал кадра (мс)
+
+/* ═══════════════════════════════════════════════════════════════
    СОСТОЯНИЕ
 ═══════════════════════════════════════════════════════════════ */
 var state = {
@@ -169,6 +197,7 @@ var state = {
     showPlanets: false,  // маркеры планет 🪐
     date:        new Date(),
     playing:     false,
+    playMode:    null,   // null | 'hour' | 'day' | 'sidereal'
     timer:       null,
   },
   lang: localStorage.getItem('femap_lang') || 'ru',
@@ -180,8 +209,6 @@ var state = {
 
 /**
  * Проверяет загружен ли astronomy-engine.
- * Библиотека грузится параллельно с map.js, поэтому при первых вызовах
- * может быть ещё недоступна.
  */
 function astroOk() {
   return typeof Astronomy !== 'undefined';
@@ -189,7 +216,6 @@ function astroOk() {
 
 /**
  * Callback — вызывается из ver.js когда astronomy-engine загружен.
- * Перерисовывает астро-слои если пользователь уже включил чекбоксы.
  */
 window.onAstronomyReady = function() {
   console.log('[map.js] astronomy-engine готов');
@@ -200,9 +226,7 @@ window.onAstronomyReady = function() {
 
 /**
  * Субсолярная точка Солнца — встроенная формула, не требует библиотеки.
- * Точность ~1°. Используется как fallback если astronomy-engine не загружен.
- * @param {Date} date
- * @returns {{ lat: number, lon: number }}
+ * Точность ~1°. Fallback если astronomy-engine не загружен.
  */
 function sunSubpoint(date) {
   var JD   = date.getTime() / 86400000 + 2440587.5;
@@ -224,24 +248,18 @@ function sunSubpoint(date) {
 
 /**
  * Субточка любого тела через astronomy-engine.
- * @param {string} bodyKey — ключ из Astronomy.Body ('Sun','Moon','Mars',...)
- * @param {Date} date
- * @returns {{ lat: number, lon: number } | null}
+ * ИСПРАВЛЕНИЕ v5.1.1: null → new Astronomy.Observer(0, 0, 0)
  */
 function bodySubpoint(bodyKey, date) {
   if (!astroOk()) return null;
   try {
     var body  = Astronomy.Body[bodyKey];
     if (body === undefined) return null;
-    var aberr = (bodyKey === 'Sun');
-    // ИСПРАВЛЕНИЕ v5.1.1: Astronomy.Equator не принимает null как observer —
-    // бросает "Not an instance of the Observer class: null".
-    // Observer(0, 0, 0) = геоцентрический наблюдатель (центр Земли, без топоцентрического смещения).
+    var aberr    = (bodyKey === 'Sun');
     var observer = new Astronomy.Observer(0, 0, 0);
-    var eq    = Astronomy.Equator(body, date, observer, true, aberr);
-    // GMST (звёздное время Гринвича) → часовой угол → долгота субточки
-    var gstDeg = Astronomy.SiderealTime(date) * 15;
-    var ghaDeg = ((gstDeg - eq.ra * 15) % 360 + 360) % 360;
+    var eq       = Astronomy.Equator(body, date, observer, true, aberr);
+    var gstDeg   = Astronomy.SiderealTime(date) * 15;
+    var ghaDeg   = ((gstDeg - eq.ra * 15) % 360 + 360) % 360;
     var lon = -ghaDeg;
     if (lon < -180) lon += 360;
     if (lon >  180) lon -= 360;
@@ -252,21 +270,14 @@ function bodySubpoint(bodyKey, date) {
   }
 }
 
-/**
- * Субточка Солнца: astronomy-engine если доступен, иначе встроенная формула.
- */
 function getSunSubpoint(date) {
   return bodySubpoint('Sun', date) || sunSubpoint(date);
 }
 
-/**
- * Иконка фазы Луны по текущей дате.
- * Требует astronomy-engine. Без него возвращает 🌙.
- */
 function moonIcon(date) {
   if (!astroOk()) return '🌙';
   try {
-    var phase = Astronomy.MoonPhase(date); // 0..360°
+    var phase = Astronomy.MoonPhase(date);
     var icons = ['🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘'];
     return icons[Math.round(phase / 45) % 8];
   } catch(e) { return '🌙'; }
@@ -274,8 +285,6 @@ function moonIcon(date) {
 
 /**
  * GeoJSON ночного полушария.
- * Ночь = сферический круг радиуса 90° вокруг антипода субсолярной точки.
- * d3.geoCircle гарантирует правильный порядок обхода для D3 clipAngle.
  */
 function nightGeoJSON(sp) {
   var aLat = -sp.lat;
@@ -287,7 +296,6 @@ function nightGeoJSON(sp) {
 
 function pad2(n) { return String(n).padStart(2, '0'); }
 
-/** Обновляет дисплей UTC-времени в панели */
 function updateAstroDisplay() {
   var el = document.getElementById('astro-display');
   if (!el) return;
@@ -297,74 +305,123 @@ function updateAstroDisplay() {
     '  ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes()) + ' UTC';
 }
 
-/**
- * Номер дня в году (0 = 1 января, 364 = 31 декабря).
- * Используется для синхронизации day-slider с state.astro.date.
- * @param {Date} date
- * @returns {number} 0..364
- */
 function dayOfYear(date) {
   var start = Date.UTC(date.getUTCFullYear(), 0, 1);
   return Math.min(364, Math.floor((date.getTime() - start) / 86400000));
 }
 
-/**
- * Устанавливает новую дату астрономии.
- * Обновляет ползунок, дисплей и перерисовывает ВСЕ астро-слои включая терминатор.
- */
 function setAstroDate(date) {
   state.astro.date = date;
-  // Суточный ползунок (минуты с полуночи UTC)
   var slider = document.getElementById('sun-slider');
   if (slider) slider.value = date.getUTCHours() * 60 + date.getUTCMinutes();
-  // Годовой ползунок (день в году)
   var daySlider = document.getElementById('day-slider');
   if (daySlider) daySlider.value = dayOfYear(date);
   updateAstroDisplay();
-  // ВАЖНО: renderAstro вызывает renderNight внутри → терминатор тоже обновляется
   renderAstro();
 }
 
-/** Запускает анимацию: +24ч каждые 80 мс = 1 год за ~29 сек */
-function astroPlay() {
-  if (state.astro.timer) return;
-  state.astro.playing = true;
-  var btn = document.getElementById('btn-astro-play');
-  if (btn) btn.textContent = '⏸';
+/* ─── Три режима анимации ───────────────────────────────────
+ *
+ *  'hour'     → +1ч   каждые 80 мс → сутки за ~2 сек
+ *  'day'      → +24ч  каждые 80 мс → год   за ~29 сек
+ *  'sidereal' → +86164с каждые 80 мс → звёздные сутки,
+ *               небесная сфера совершает ровно 1 оборот.
+ *               Планеты и Луна возвращаются на то же место.
+ */
+
+/**
+ * Запускает анимацию в указанном режиме.
+ * Если этот же режим уже играет — ставит на паузу (toggle).
+ * Если играет другой режим — сначала останавливает его.
+ * @param {'hour'|'day'|'sidereal'} mode
+ */
+function astroPlayMode(mode) {
+  // Toggle: нажали ту же кнопку — пауза
+  if (state.astro.playing && state.astro.playMode === mode) {
+    astroPause();
+    return;
+  }
+  // Остановить предыдущую анимацию (если была)
+  astroPause();
+
+  state.astro.playing  = true;
+  state.astro.playMode = mode;
+
+  // Подсветить активную кнопку
+  updatePlayButtons();
+
+  var stepMs = ANIM_STEP[mode];
   state.astro.timer = setInterval(function() {
-    setAstroDate(new Date(state.astro.date.getTime() + 24 * 60 * 60 * 1000));
-  }, 80);
+    setAstroDate(new Date(state.astro.date.getTime() + stepMs));
+  }, ANIM_INTERVAL_MS);
 }
 
 function astroPause() {
   if (state.astro.timer) { clearInterval(state.astro.timer); state.astro.timer = null; }
-  state.astro.playing = false;
-  var btn = document.getElementById('btn-astro-play');
-  if (btn) btn.textContent = '▶';
+  state.astro.playing  = false;
+  state.astro.playMode = null;
+  updatePlayButtons();
 }
 
-/** Возвращает true если хотя бы один астро-слой включён */
+/**
+ * Обновляет вид кнопок анимации и подсказку режима.
+ */
+function updatePlayButtons() {
+  var modes = ['hour', 'day', 'sidereal'];
+  var btnIds = {
+    hour:     'btn-play-hour',
+    day:      'btn-play-day',
+    sidereal: 'btn-play-sidereal',
+  };
+  var labels = {
+    hour:     { ru:'▶ 1ч',   en:'▶ 1h',   de:'▶ 1h'   },
+    day:      { ru:'▶ 24ч',  en:'▶ 24h',  de:'▶ 24h'  },
+    sidereal: { ru:'▶ ☆сут', en:'▶ ☆sid', de:'▶ ☆sid' },
+  };
+  var pauseLabels = {
+    hour:     { ru:'⏸ 1ч',   en:'⏸ 1h',   de:'⏸ 1h'   },
+    day:      { ru:'⏸ 24ч',  en:'⏸ 24h',  de:'⏸ 24h'  },
+    sidereal: { ru:'⏸ ☆сут', en:'⏸ ☆sid', de:'⏸ ☆sid' },
+  };
+  var t = LANG[state.lang];
+  modes.forEach(function(m) {
+    var btn = document.getElementById(btnIds[m]);
+    if (!btn) return;
+    var active = state.astro.playing && state.astro.playMode === m;
+    btn.textContent = active ? pauseLabels[m][state.lang] : labels[m][state.lang];
+    btn.style.background = active ? '#1a5a8a' : '';
+    btn.style.borderColor = active ? '#3ab4ff' : '';
+  });
+  // Подсказка активного режима
+  var hint = document.getElementById('astro-mode-hint');
+  if (hint) {
+    if (state.astro.playing && state.astro.playMode) {
+      var modeKey = {
+        hour:     'modeHour',
+        day:      'modeDay',
+        sidereal: 'modeSidereal',
+      }[state.astro.playMode];
+      hint.textContent = t[modeKey] || '';
+    } else {
+      hint.textContent = '';
+    }
+  }
+}
+
 function astroAnyOn() {
   return state.astro.showSun || state.astro.showNight ||
          state.astro.showMoon || state.astro.showPlanets;
 }
 
-/** Показывает/скрывает панель управления временем */
 function updateAstroTimePanel() {
   var el = document.getElementById('astro-time');
   if (el) el.style.display = astroAnyOn() ? 'block' : 'none';
   if (!astroAnyOn()) astroPause();
 }
 
-/**
- * Возвращает массив текущих астро-объектов с координатами.
- * Используется в магните линейки.
- * @returns {Array<{lon, lat, name}>}
- */
 function getAstroPoints() {
   var result = [];
   var date = state.astro.date;
-
   if (state.astro.showSun) {
     var sp = getSunSubpoint(date);
     result.push({ lon: sp.lon, lat: sp.lat, name: '☀' });
@@ -399,6 +456,8 @@ function applyLang() {
   document.querySelectorAll('.btn-lang').forEach(function(btn) {
     btn.classList.toggle('active', btn.dataset.lang === state.lang);
   });
+  // Обновить подписи кнопок плея (текущий язык)
+  updatePlayButtons();
   if (state.projection) renderCities();
 }
 
@@ -427,7 +486,7 @@ function createSVG() {
     state.svg.append('g').attr('id', 'layer-' + id);
   });
 
-  // Следим за изменением размера контейнера (поворот телефона и т.п.)
+  // Следим за изменением размера контейнера
   new ResizeObserver(function() {
     var w = container.clientWidth, h = container.clientHeight;
     if (Math.abs(w - state.width) < 2 && Math.abs(h - state.height) < 2) return;
@@ -446,13 +505,11 @@ function setupZoom() {
   state.zoom = d3.zoom()
     .scaleExtent([0.3, 50])
     .on('zoom', function(event) {
-      // map-content масштабируется CSS transform
       state.svg.select('#map-content').attr('transform', event.transform);
-      // Оверлеи пересчитываются вручную — используют zoom-transform для координат
       renderLabels();
       renderCities();
       renderRuler();
-      renderAstro(); // включает renderNight()
+      renderAstro();
     });
   state.svg.call(state.zoom)
     .on('dblclick.zoom', function() { resetZoom(); });
@@ -477,9 +534,9 @@ function buildProjection() {
   var w = state.width  || window.innerWidth  || 300;
   var h = state.height || window.innerHeight || 300;
   state.projection = d3.geoAzimuthalEquidistant()
-    .rotate([-state.lon, -state.lat])   // центрируем на выбранных координатах
+    .rotate([-state.lon, -state.lat])
     .fitSize([w, h], { type: 'Sphere' })
-    .clipAngle(179.9); // 179.9 а не 180 — избегаем числового мусора на антиподах
+    .clipAngle(179.9);
   state.path = d3.geoPath(state.projection);
 }
 
@@ -489,13 +546,11 @@ function buildProjection() {
 async function loadData() {
   setStatus(LANG[state.lang].loading);
 
-  // Загружаем точки из localStorage (или дефолтные города)
   try {
     var saved = localStorage.getItem('femap_points_v5');
     if (saved) {
       state.points = JSON.parse(saved);
     } else {
-      // Миграция с предыдущей версии (v4)
       var oldV4 = localStorage.getItem('femap_points_v4');
       if (oldV4) {
         var v4data  = JSON.parse(oldV4);
@@ -510,7 +565,6 @@ async function loadData() {
   }
   refreshPointsList();
 
-  // Загружаем GeoJSON карты
   try {
     var res = await Promise.all([d3.json(LAND_URL), d3.json(BORDERS_URL)]);
     state.land    = res[0];
@@ -550,7 +604,6 @@ function refreshPointsList() {
     var info = document.createElement('div');
     info.className = 'point-item';
     info.onclick = function() {
-      // Клик по точке в списке — центрируем карту и зумируем
       document.getElementById('inp-lat').value = p.lat;
       document.getElementById('inp-lon').value = p.lon;
       applyCenter(p.lat, p.lon);
@@ -608,17 +661,14 @@ function renderLabels() {
   });
 }
 
-/** Полный рендер всех слоёв карты + оверлеи */
 function render() {
   if (!state.svg || !state.projection) return;
 
-  // Вода (фон диска)
   var lw = state.svg.select('#layer-water');
   lw.selectAll('*').remove();
   lw.append('path').datum({type:'Sphere'})
     .attr('d', state.path).attr('fill', COLORS.water);
 
-  // Суша
   var ll = state.svg.select('#layer-land');
   ll.selectAll('*').remove();
   if (state.land) {
@@ -626,7 +676,6 @@ function render() {
       .attr('d', state.path).attr('fill', COLORS.land);
   }
 
-  // Границы стран
   var lb = state.svg.select('#layer-borders');
   lb.selectAll('*').remove();
   if (state.borders) {
@@ -635,7 +684,6 @@ function render() {
       .attr('stroke', COLORS.borders).attr('stroke-width', 0.6);
   }
 
-  // Сетка параллелей и меридианов 30°
   var lg = state.svg.select('#layer-grid');
   lg.selectAll('*').remove();
   if (state.showGrid) {
@@ -644,18 +692,16 @@ function render() {
       .attr('stroke', COLORS.grid).attr('stroke-width',0.5).attr('opacity',0.7);
   }
 
-  // Рамка диска (обводка Sphere)
   var lbr = state.svg.select('#layer-border');
   lbr.selectAll('*').remove();
   lbr.append('path').datum({type:'Sphere'})
     .attr('d', state.path).attr('fill','none')
     .attr('stroke', COLORS.diskBorder).attr('stroke-width',1.5);
 
-  // Все оверлеи
   renderLabels();
   renderCities();
   renderRuler();
-  renderAstro(); // включает renderNight() внутри
+  renderAstro();
 }
 
 function renderCities() {
@@ -688,13 +734,10 @@ function renderCities() {
 
 /**
  * Ночная тень — geo-слой ВНУТРИ map-content.
- * Масштабируется вместе с картой через d3.zoom transform.
- * ВАЖНО: вызывается из renderAstro() чтобы обновляться при смене времени.
  */
 function renderNight() {
   var layer = state.svg.select('#layer-night');
   layer.selectAll('*').remove();
-  // Терминатор управляется СВОИМ чекбоксом chk-night, независимо от Солнца
   if (!state.astro.showNight) return;
   var sp = getSunSubpoint(state.astro.date);
   layer.append('path').datum(nightGeoJSON(sp))
@@ -706,36 +749,26 @@ function renderNight() {
 
 /**
  * Рисует маркер небесного тела на оверлей-слое.
- * Оверлей находится ВНЕ map-content, поэтому координаты пересчитываем
- * через текущий zoom-transform: projection([lon,lat]) → tr.apply(proj).
- *
- * @param {string} layerId — id слоя без '#'
- * @param {number} lon, lat — географические координаты субточки
- * @param {object} opts — { sym, r, fill, stroke, glow, labelColor }
  */
 function drawMarker(layerId, lon, lat, opts) {
   var layer = state.svg.select('#' + layerId);
   var proj  = state.projection([lon, lat]);
-  if (!proj) return; // точка за горизонтом проекции
+  if (!proj) return;
   var tr = d3.zoomTransform(state.svg.node());
   var pt = tr.apply(proj);
   var px = pt[0], py = pt[1];
 
-  // Ореол (мягкое свечение вокруг диска)
   if (opts.glow) {
     layer.append('circle').attr('cx',px).attr('cy',py)
       .attr('r', opts.r + 10).attr('fill', opts.glow);
   }
-  // Диск объекта
   layer.append('circle').attr('cx',px).attr('cy',py)
     .attr('r', opts.r).attr('fill', opts.fill)
     .attr('stroke', opts.stroke || 'none')
     .attr('stroke-width', opts.stroke ? 1.5 : 0);
-  // Символ/иконка внутри диска
   layer.append('text').attr('x',px).attr('y',py).attr('dy','0.38em')
     .attr('text-anchor','middle').attr('font-size', (opts.r + 2) + 'px')
     .attr('pointer-events','none').text(opts.sym);
-  // Подпись координат субточки
   layer.append('text').attr('x',px).attr('y', py - opts.r - 5)
     .attr('text-anchor','middle').attr('fill', opts.labelColor || '#ccc')
     .attr('font-size','9px').attr('font-family','monospace')
@@ -745,21 +778,16 @@ function drawMarker(layerId, lon, lat, opts) {
 
 /**
  * Главный рендер всех астро-слоёв.
- * Вызывается из render(), из обработчика zoom и из setAstroDate().
- * Это гарантирует что терминатор и маркеры обновляются при любом изменении.
  */
 function renderAstro() {
-  // Сначала терминатор (geo-слой внутри map-content)
   renderNight();
 
-  // Очищаем оверлей-слои
   ['sun','moon','planets'].forEach(function(id) {
     state.svg.select('#layer-' + id).selectAll('*').remove();
   });
 
   var date = state.astro.date;
 
-  // ☀ Солнце
   if (state.astro.showSun) {
     var sp = getSunSubpoint(date);
     drawMarker('layer-sun', sp.lon, sp.lat, {
@@ -770,7 +798,6 @@ function renderAstro() {
     });
   }
 
-  // 🌙 Луна (требует astronomy-engine)
   if (state.astro.showMoon) {
     var mp = bodySubpoint('Moon', date);
     if (mp) {
@@ -781,11 +808,8 @@ function renderAstro() {
         labelColor: '#c8deff',
       });
     }
-    // Если mp===null — astronomy-engine ещё не загружен.
-    // window.onAstronomyReady перерисует когда загрузится.
   }
 
-  // 🪐 Планеты (требуют astronomy-engine)
   if (state.astro.showPlanets && astroOk()) {
     var layer = state.svg.select('#layer-planets');
     PLANETS.forEach(function(pl) {
@@ -814,16 +838,9 @@ function renderAstro() {
 /* ═══════════════════════════════════════════════════════════════
    ЛИНЕЙКА
 ═══════════════════════════════════════════════════════════════ */
-
-/**
- * Обработчик клика на карту.
- * Определяет географические координаты клика.
- * Магнит: притягивается к ближайшему городу ИЛИ астро-объекту в радиусе 25px.
- */
 function handleMapClick(event) {
   if (!state.ruler.active) return;
 
-  // Координаты клика относительно SVG
   var pt = d3.pointer(event, state.svg.node());
   var mx = pt[0], my = pt[1];
   var tr     = d3.zoomTransform(state.svg.node());
@@ -831,7 +848,6 @@ function handleMapClick(event) {
   var coords = state.projection.invert(mapPt);
   if (!coords || isNaN(coords[0]) || isNaN(coords[1])) return;
 
-  // Магнит к городам/точкам пользователя
   var minD = 25;
   state.points.forEach(function(p) {
     var proj = state.projection([p.lon, p.lat]);
@@ -841,7 +857,6 @@ function handleMapClick(event) {
     if (d < minD) { minD = d; coords = [p.lon, p.lat]; }
   });
 
-  // Магнит к астро-объектам (Солнце, Луна, планеты)
   getAstroPoints().forEach(function(p) {
     var proj = state.projection([p.lon, p.lat]);
     if (!proj) return;
@@ -861,9 +876,7 @@ function handleMapClick(event) {
 function calculateRulerDistances() {
   if (state.ruler.points.length < 2) return;
   var p1 = state.ruler.points[0], p2 = state.ruler.points[1];
-  // Расстояние по сфере (большой круг) — не зависит от проекции
   state.ruler.distSphere = d3.geoDistance(p1, p2) * 6371;
-  // Расстояние по AE-карте (евклидово на плоскости) — меняется при смене центра!
   var proj1 = state.projection(p1), proj2 = state.projection(p2);
   if (proj1 && proj2) {
     state.ruler.distAE = Math.hypot(proj2[0]-proj1[0], proj2[1]-proj1[1]) /
@@ -881,7 +894,6 @@ function renderRuler() {
     return proj ? tr.apply(proj) : null;
   });
 
-  // Пунктирная линия между точками
   if (sPts.length === 2 && sPts[0] && sPts[1]) {
     layer.append('line')
       .attr('x1',sPts[0][0]).attr('y1',sPts[0][1])
@@ -890,7 +902,6 @@ function renderRuler() {
       .attr('stroke-dasharray','7,4').attr('opacity',0.9);
   }
 
-  // Маркеры A и B
   sPts.forEach(function(pt, i) {
     if (!pt) return;
     var color = i === 0 ? COLORS.rulerA : COLORS.rulerB;
@@ -902,7 +913,6 @@ function renderRuler() {
       .attr('pointer-events','none').text(i===0 ? 'A' : 'B');
   });
 
-  // Всплывающая подпись с расстояниями
   if (sPts.length===2 && sPts[0] && sPts[1] && state.ruler.distSphere !== null) {
     var mx0=(sPts[0][0]+sPts[1][0])/2, my0=(sPts[0][1]+sPts[1][1])/2;
     var dx=sPts[1][0]-sPts[0][0], dy=sPts[1][1]-sPts[0][1];
@@ -929,17 +939,12 @@ function renderRuler() {
 /* ═══════════════════════════════════════════════════════════════
    УТИЛИТЫ
 ═══════════════════════════════════════════════════════════════ */
-
-/**
- * Применяет новый центр проекции.
- * Порядок важен: сначала сбросить зум, потом пересчитать проекцию.
- */
 function applyCenter(lat, lon) {
   if (typeof lat==='string') lat = lat.replace(',','.');
   if (typeof lon==='string') lon = lon.replace(',','.');
   state.lat = Math.max(-90,  Math.min(90,  parseFloat(lat)||0));
   state.lon = Math.max(-180, Math.min(180, parseFloat(lon)||0));
-  clearZoomTransform(); // ВАЖНО: сначала сброс
+  clearZoomTransform();
   buildProjection();
   calculateRulerDistances();
   render();
@@ -996,7 +1001,7 @@ async function init() {
     });
   });
 
-  // Кнопки ± (инвертирование знака координат)
+  // Кнопки ±
   document.querySelectorAll('.btn-sign').forEach(function(btn) {
     btn.addEventListener('click', function() {
       var inp = document.getElementById(btn.dataset.target);
@@ -1020,7 +1025,6 @@ async function init() {
     toggleRuler(e.target.checked);
   });
 
-  // Линейка — кнопка на карте
   document.getElementById('btn-ruler-map').addEventListener('click', function() {
     toggleRuler(!state.ruler.active);
   });
@@ -1043,7 +1047,7 @@ async function init() {
     updateAstroTimePanel(); renderAstro();
   });
 
-  // Ползунок времени UTC (суточный, минуты 0-1439)
+  // Ползунок UTC (суточный)
   document.getElementById('sun-slider').addEventListener('input', function(e) {
     astroPause();
     var mins = parseInt(e.target.value, 10);
@@ -1052,12 +1056,11 @@ async function init() {
     setAstroDate(d);
   });
 
-  // Годовой ползунок (день в году, 0-364, шаг = 1 сутки)
+  // Ползунок дней (годовой)
   document.getElementById('day-slider').addEventListener('input', function(e) {
     astroPause();
     var targetDay = parseInt(e.target.value, 10);
     var d = state.astro.date;
-    // Jan 1 текущего года + targetDay суток, сохраняем текущее UTC-время
     var newMs = Date.UTC(
       d.getUTCFullYear(), 0, 1,
       d.getUTCHours(), d.getUTCMinutes(), 0, 0
@@ -1065,10 +1068,7 @@ async function init() {
     setAstroDate(new Date(newMs));
   });
 
-  // Кнопки управления временем
-  document.getElementById('btn-astro-play').addEventListener('click', function() {
-    if (state.astro.playing) astroPause(); else astroPlay();
-  });
+  // Кнопки навигации по дням
   document.getElementById('btn-astro-now').addEventListener('click', function() {
     astroPause(); setAstroDate(new Date());
   });
@@ -1079,6 +1079,17 @@ async function init() {
   document.getElementById('btn-astro-next').addEventListener('click', function() {
     astroPause();
     setAstroDate(new Date(state.astro.date.getTime() + 86400000));
+  });
+
+  // Три кнопки анимации
+  document.getElementById('btn-play-hour').addEventListener('click', function() {
+    astroPlayMode('hour');
+  });
+  document.getElementById('btn-play-day').addEventListener('click', function() {
+    astroPlayMode('day');
+  });
+  document.getElementById('btn-play-sidereal').addEventListener('click', function() {
+    astroPlayMode('sidereal');
   });
 
   // Пресеты координат

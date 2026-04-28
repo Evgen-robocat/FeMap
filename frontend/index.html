@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--
   Файл    : frontend/index.html
-  Версия  : 1.3.0 (HTML_V=4)
-  Изменения: добавлен day-slider (годовой ползунок)
+  Версия  : 1.4.0 (HTML_V=5)
+  Изменения: три кнопки анимации — ▶1ч (суточный), ▶24ч (годовой), ▶☆ (звёздные сутки)
 -->
 <html lang="ru">
 <head>
@@ -100,6 +100,7 @@
       <div id="astro-display"
            style="font-family:monospace; font-size:11px; color:#a0c4d8;
                   text-align:center; margin-bottom:5px;">…</div>
+
       <!-- Годовой ползунок (шаг 1 сутки) -->
       <div style="display:flex; align-items:center; gap:4px; margin-bottom:3px;">
         <span style="font-size:9px; color:#6a8a9a; min-width:26px; text-align:right;">год</span>
@@ -107,18 +108,42 @@
                min="0" max="364" value="0" step="1"
                style="flex:1;">
       </div>
+
       <!-- Суточный ползунок (шаг 1 минута) -->
-      <div style="display:flex; align-items:center; gap:4px; margin-bottom:5px;">
+      <div style="display:flex; align-items:center; gap:4px; margin-bottom:6px;">
         <span style="font-size:9px; color:#6a8a9a; min-width:26px; text-align:right;">UTC</span>
         <input type="range" id="sun-slider"
                min="0" max="1439" value="720" step="1"
                style="flex:1;">
       </div>
-      <div style="display:flex; gap:5px;">
+
+      <!-- Кнопки навигации по дням -->
+      <div style="display:flex; gap:5px; margin-bottom:5px;">
         <button id="btn-astro-prev" class="btn-preset" style="flex:1;padding:5px 2px;">← День</button>
-        <button id="btn-astro-play" class="btn-preset" style="flex:1;padding:5px 2px;">▶</button>
         <button id="btn-astro-now"  class="btn-preset" style="flex:1;padding:5px 2px;">⊙ Сейчас</button>
         <button id="btn-astro-next" class="btn-preset" style="flex:1;padding:5px 2px;">День →</button>
+      </div>
+
+      <!-- Три кнопки анимации -->
+      <div style="display:flex; gap:5px;">
+        <!-- Суточная анимация: шаг +1ч, 24 кадра = 1 сутки за ~2 сек -->
+        <button id="btn-play-hour"     class="btn-preset"
+                style="flex:1; padding:5px 2px; font-size:10px;"
+                title="Суточная анимация: шаг 1 час">▶ 1ч</button>
+        <!-- Годовая анимация: шаг +24ч, 365 кадров = 1 год за ~29 сек -->
+        <button id="btn-play-day"      class="btn-preset"
+                style="flex:1; padding:5px 2px; font-size:10px;"
+                title="Годовая анимация: шаг 1 сутки">▶ 24ч</button>
+        <!-- Звёздные сутки: шаг +23ч 56м 4с — небесная сфера делает ровно 1 оборот -->
+        <button id="btn-play-sidereal" class="btn-preset"
+                style="flex:1; padding:5px 2px; font-size:10px;"
+                title="Звёздные сутки: шаг 23ч 56м 4с">▶ ☆сут</button>
+      </div>
+
+      <!-- Подсказка активного режима -->
+      <div id="astro-mode-hint"
+           style="font-size:9px; color:#5a8a9a; text-align:center;
+                  margin-top:3px; min-height:12px;">
       </div>
     </div>
 
