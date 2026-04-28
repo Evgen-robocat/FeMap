@@ -1,15 +1,15 @@
 /**
  * Файл    : frontend/static/ver.js
- * Версия  : 5.3.0
+ * Версия  : 5.4.0
  *
  * Цепочка: d3 → map.js (сразу)
  *          d3 → astronomy.min.js (параллельно, локально)
  */
 (function () {
-  var APP_VERSION = '5.3.0';
-  var MAP_V       = '54';
+  var APP_VERSION = '5.4.0';
+  var MAP_V       = '55';
   var CSS_V       = '40';
-  var HTML_V      = '5';   // index.html: три кнопки анимации (1ч / 24ч / ☆сут)
+  var HTML_V      = '6';   // index.html: добавлен chk-stars (✦ Звёзды)
 
   var link = document.createElement('link');
   link.rel  = 'stylesheet';

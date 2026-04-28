@@ -1,19 +1,28 @@
 /**
  * Файл    : frontend/static/map.js
- * Версия  : 5.3.0
+ * Версия  : 5.4.0
  * Автор   : Евгений / Claude
+ *
+ * ИЗМЕНЕНИЯ v5.4.0:
+ *   - Отображение ярких звёзд ✦ (chk-stars → layer-stars)
+ *   - STARS: 25 звёзд — Ковш (α..η UMa), Полярная, Вега, Арктур,
+ *     Сириус, Орион (6 звёзд), Южный Крест (4), Канопус, Ахернар,
+ *     α/β Центавра
+ *   - STAR_LINES: линии созвездий (Ковш, Орион, Южный Крест)
+ *   - starSubpoint(ra_hours, dec, date): субточка через GMST,
+ *     не требует astronomy-engine (fallback-формула)
+ *   - renderStars(): слой layer-stars (оверлей, не масштабируется)
+ *   - astroAnyOn() и updateAstroTimePanel() учитывают showStars
+ *   - state.astro.showStars: false
  *
  * ИЗМЕНЕНИЯ v5.3.0:
  *   - Три независимых режима анимации:
  *       ▶ 1ч   — суточная (шаг +1ч,  80 мс, сутки за ~2 сек)
  *       ▶ 24ч  — годовая  (шаг +24ч, 80 мс, год   за ~29 сек)
  *       ▶ ☆сут — звёздные сутки (шаг 23ч 56м 4с = 86164с, 80 мс)
- *                небесная сфера делает ровно 1 оборот — планеты
- *                и звёзды возвращаются на то же место
  *   - Кнопки: btn-play-hour / btn-play-day / btn-play-sidereal
  *   - Подсказка активного режима в #astro-mode-hint
  *   - state.astro.playMode: null | 'hour' | 'day' | 'sidereal'
- *   - Удалён единственный btn-astro-play
  *
  * ИЗМЕНЕНИЯ v5.2.0:
  *   - Годовой ползунок (day-slider): шаг 1 сутки, охват 1 год
@@ -32,7 +41,7 @@
 
 'use strict';
 
-var VERSION = window.FEMAP_VERSION || '5.3.0';
+var VERSION = window.FEMAP_VERSION || '5.4.0';
 
 /* ═══════════════════════════════════════════════════════════════
    ЦВЕТА
@@ -62,6 +71,135 @@ var PLANETS = [
   { key:'Saturn',  sym:'♄', color:'#ffe899', r:7, label:{ru:'Сатурн',  en:'Saturn', de:'Saturn'  } },
   { key:'Uranus',  sym:'♅', color:'#88ddff', r:5, label:{ru:'Уран',    en:'Uranus', de:'Uranus'  } },
   { key:'Neptune', sym:'♆', color:'#7788ff', r:5, label:{ru:'Нептун',  en:'Neptune',de:'Neptun'  } },
+];
+
+/* ═══════════════════════════════════════════════════════════════
+   ЗВЁЗДЫ — J2000 координаты (RA в часах, Dec в градусах)
+   Цвет по спектральному классу:
+     O → #9bb0ff (сине-фиолетовый)
+     B → #aabfff (голубовато-белый)
+     A → #cad7ff (белый)
+     F → #f8f7ff (желтовато-белый)
+     G → #fff4ea (жёлтый)
+     K → #ffd2a1 (оранжевый)
+     M → #ffcc6f (красно-оранжевый)
+   r — радиус иконки (3–5, пропорционально блеску)
+   label — подпись (только для r≥4)
+═══════════════════════════════════════════════════════════════ */
+var STARS = [
+  // ── Полярная звезда (α UMi) ──────────────────────────────
+  { ra: 2.5303, dec: 89.26, r:3, color:'#f8f7ff',  // F7
+    name:{ru:'Полярная', en:'Polaris', de:'Polarstern'} },
+
+  // ── Ковш Большой Медведицы (α..η UMa) ───────────────────
+  // Индекс 1
+  { ra:11.0621, dec: 61.75, r:3, color:'#ffd2a1',  // K0  α UMa Дубхе
+    name:{ru:'Дубхе', en:'Dubhe', de:'Dubhe'} },
+  // Индекс 2
+  { ra:11.0307, dec: 56.38, r:2, color:'#cad7ff',  // A1  β UMa Мерак
+    name:{ru:'Мерак', en:'Merak', de:'Merak'} },
+  // Индекс 3
+  { ra:11.8972, dec: 53.70, r:2, color:'#cad7ff',  // A0  γ UMa Фекда
+    name:{ru:'Фекда', en:'Phecda', de:'Phecda'} },
+  // Индекс 4
+  { ra:12.2571, dec: 57.03, r:2, color:'#cad7ff',  // A3  δ UMa Мегрец
+    name:{ru:'Мегрец', en:'Megrez', de:'Megrez'} },
+  // Индекс 5
+  { ra:12.9005, dec: 55.96, r:3, color:'#cad7ff',  // A0p ε UMa Алиот
+    name:{ru:'Алиот', en:'Alioth', de:'Alioth'} },
+  // Индекс 6
+  { ra:13.3988, dec: 54.93, r:2, color:'#cad7ff',  // A2  ζ UMa Мицар
+    name:{ru:'Мицар', en:'Mizar', de:'Mizar'} },
+  // Индекс 7
+  { ra:13.7923, dec: 49.31, r:3, color:'#aabfff',  // B3  η UMa Алькаид
+    name:{ru:'Алькаид', en:'Alkaid', de:'Alkaid'} },
+
+  // ── Вега (α Lyr) ─────────────────────────────────────────
+  // Индекс 8
+  { ra:18.6156, dec: 38.78, r:4, color:'#cad7ff',  // A0
+    name:{ru:'Вега', en:'Vega', de:'Wega'} },
+
+  // ── Арктур (α Boo) ───────────────────────────────────────
+  // Индекс 9
+  { ra:14.2610, dec: 19.18, r:4, color:'#ffd2a1',  // K1.5
+    name:{ru:'Арктур', en:'Arcturus', de:'Arktur'} },
+
+  // ── Сириус (α CMa) ───────────────────────────────────────
+  // Индекс 10
+  { ra: 6.7525, dec:-16.72, r:5, color:'#cad7ff',  // A1
+    name:{ru:'Сириус', en:'Sirius', de:'Sirius'} },
+
+  // ── Орион ────────────────────────────────────────────────
+  // Индекс 11  Ригель (β Ori)
+  { ra: 5.2423, dec: -8.20, r:4, color:'#aabfff',  // B8
+    name:{ru:'Ригель', en:'Rigel', de:'Rigel'} },
+  // Индекс 12  Бетельгейзе (α Ori)
+  { ra: 5.9195, dec:  7.41, r:4, color:'#ffcc6f',  // M1
+    name:{ru:'Бетельгейзе', en:'Betelgeuse', de:'Beteigeuze'} },
+  // Индекс 13  Беллатрикс (γ Ori)
+  { ra: 5.4189, dec:  6.34, r:3, color:'#aabfff',  // B2
+    name:{ru:'Беллатрикс', en:'Bellatrix', de:'Bellatrix'} },
+  // Индекс 14  Минтака (δ Ori)
+  { ra: 5.5334, dec: -0.30, r:2, color:'#9bb0ff',  // O9
+    name:{ru:'Минтака', en:'Mintaka', de:'Mintaka'} },
+  // Индекс 15  Алнилам (ε Ori)
+  { ra: 5.6035, dec: -1.20, r:3, color:'#aabfff',  // B0
+    name:{ru:'Алнилам', en:'Alnilam', de:'Alnilam'} },
+  // Индекс 16  Альнитак (ζ Ori)
+  { ra: 5.6793, dec: -1.94, r:3, color:'#9bb0ff',  // O9
+    name:{ru:'Альнитак', en:'Alnitak', de:'Alnitak'} },
+
+  // ── Южный Крест ───────────────────────────────────────────
+  // Индекс 17  α Cru (Акрукс)
+  { ra:12.4433, dec:-63.09, r:4, color:'#aabfff',  // B0.5
+    name:{ru:'Акрукс', en:'Acrux', de:'Acrux'} },
+  // Индекс 18  β Cru (Мимоза)
+  { ra:12.7954, dec:-59.69, r:3, color:'#aabfff',  // B1
+    name:{ru:'Мимоза', en:'Mimosa', de:'Mimosa'} },
+  // Индекс 19  γ Cru (Гакрукс)
+  { ra:12.5194, dec:-57.11, r:3, color:'#ffcc6f',  // M3
+    name:{ru:'Гакрукс', en:'Gacrux', de:'Gacrux'} },
+  // Индекс 20  δ Cru
+  { ra:12.2524, dec:-58.75, r:2, color:'#aabfff',  // B2
+    name:{ru:'δ Кру', en:'δ Cru', de:'δ Cru'} },
+
+  // ── Канопус (α Car) ──────────────────────────────────────
+  // Индекс 21
+  { ra: 6.3992, dec:-52.70, r:5, color:'#f8f7ff',  // A9
+    name:{ru:'Канопус', en:'Canopus', de:'Kanopus'} },
+
+  // ── Ахернар (α Eri) ──────────────────────────────────────
+  // Индекс 22
+  { ra: 1.6285, dec:-57.24, r:4, color:'#aabfff',  // B3
+    name:{ru:'Ахернар', en:'Achernar', de:'Achernar'} },
+
+  // ── α Центавра (Rigil Kentaurus) ─────────────────────────
+  // Индекс 23
+  { ra:14.6601, dec:-60.83, r:4, color:'#fff4ea',  // G2
+    name:{ru:'α Центавра', en:'α Centauri', de:'α Zentauri'} },
+
+  // ── β Центавра (Хадар) ───────────────────────────────────
+  // Индекс 24
+  { ra:14.0637, dec:-60.37, r:4, color:'#aabfff',  // B1
+    name:{ru:'Хадар', en:'Hadar', de:'Hadar'} },
+];
+
+/**
+ * Линии созвездий — пары индексов из массива STARS.
+ * Рисуются тонкими полупрозрачными линиями под иконками звёзд.
+ */
+var STAR_LINES = [
+  // Ковш Большой Медведицы: чаша (α-β-γ-δ-α) + ручка (δ-ε-ζ-η)
+  [1,2],[2,3],[3,4],[4,1],
+  [4,5],[5,6],[6,7],
+  // Орион: пояс + плечи + нога
+  [14,15],[15,16],          // пояс: Минтака-Алнилам-Альнитак
+  [13,12],                  // плечи: Беллатрикс-Бетельгейзе
+  [13,14],[12,16],          // плечи к поясу
+  [11,14],                  // нога Ригель к поясу
+  // Южный Крест: две оси
+  [19,17],                  // вертикаль: Гакрукс-Акрукс
+  [20,18],                  // горизонталь: δCru-Мимоза
 ];
 
 /* ═══════════════════════════════════════════════════════════════
@@ -195,6 +333,7 @@ var state = {
     showNight:   false,  // тень день/ночь (терминатор) — ОТДЕЛЬНО от Солнца
     showMoon:    false,  // маркер Луны 🌙
     showPlanets: false,  // маркеры планет 🪐
+    showStars:   false,  // яркие звёзды ✦
     date:        new Date(),
     playing:     false,
     playMode:    null,   // null | 'hour' | 'day' | 'sidereal'
@@ -284,6 +423,35 @@ function moonIcon(date) {
 }
 
 /**
+ * Субточка звезды по J2000 экваториальным координатам.
+ * Не требует astronomy-engine — вычисляет GMST самостоятельно.
+ * Если astronomy-engine доступен — использует его Sidereal Time
+ * для большей точности.
+ *
+ * @param {number} ra_hours  Прямое восхождение (J2000) в часах (0..24)
+ * @param {number} dec       Склонение (J2000) в градусах
+ * @param {Date}   date      Текущий момент времени
+ * @returns {{ lat: number, lon: number }}
+ */
+function starSubpoint(ra_hours, dec, date) {
+  var gstHours;
+  if (astroOk()) {
+    // Высокоточный GMST через astronomy-engine
+    gstHours = Astronomy.SiderealTime(date);
+  } else {
+    // Аппроксимация — та же формула что в sunSubpoint
+    var JD   = date.getTime() / 86400000 + 2440587.5;
+    var n    = JD - 2451545.0;
+    var UT   = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
+    gstHours = ((6.697375 + 0.0657098242 * n + UT * 1.00273791) % 24 + 24) % 24;
+  }
+  // lon = (RA - GMST) * 15°, нормализация к [-180, 180]
+  var lon = (ra_hours - gstHours) * 15;
+  lon = ((lon + 180) % 360 + 360) % 360 - 180;
+  return { lat: dec, lon: lon };
+}
+
+/**
  * GeoJSON ночного полушария.
  */
 function nightGeoJSON(sp) {
@@ -326,7 +494,7 @@ function setAstroDate(date) {
  *  'day'      → +24ч  каждые 80 мс → год   за ~29 сек
  *  'sidereal' → +86164с каждые 80 мс → звёздные сутки,
  *               небесная сфера совершает ровно 1 оборот.
- *               Планеты и Луна возвращаются на то же место.
+ *               Планеты, Луна и звёзды возвращаются на то же место.
  */
 
 /**
@@ -409,8 +577,9 @@ function updatePlayButtons() {
 }
 
 function astroAnyOn() {
-  return state.astro.showSun || state.astro.showNight ||
-         state.astro.showMoon || state.astro.showPlanets;
+  return state.astro.showSun    || state.astro.showNight  ||
+         state.astro.showMoon   || state.astro.showPlanets ||
+         state.astro.showStars;
 }
 
 function updateAstroTimePanel() {
@@ -482,7 +651,7 @@ function createSVG() {
   });
 
   // Оверлеи вне map-content — НЕ масштабируются, пересчитываются через zoom-transform
-  ['labels','cities','ruler','sun','moon','planets'].forEach(function(id) {
+  ['labels','cities','ruler','sun','moon','planets','stars'].forEach(function(id) {
     state.svg.append('g').attr('id', 'layer-' + id);
   });
 
@@ -777,12 +946,103 @@ function drawMarker(layerId, lon, lat, opts) {
 }
 
 /**
+ * Рендер ярких звёзд на оверлей-слое layer-stars.
+ *
+ * Каждая звезда:
+ *   — субточка вычисляется через starSubpoint() (GMST)
+ *   — кружок с цветом спектрального класса
+ *   — иконка ✦ внутри
+ *   — подпись для ярких (r ≥ 4) — справа вверх
+ * Перед иконками рисуются линии созвездий (STAR_LINES) —
+ * тонкие полупрозрачные, чтобы не мешать карте.
+ */
+function renderStars() {
+  var layer = state.svg.select('#layer-stars');
+  layer.selectAll('*').remove();
+  if (!state.astro.showStars) return;
+
+  var date = state.astro.date;
+  var tr   = d3.zoomTransform(state.svg.node());
+
+  // ── Линии созвездий ──────────────────────────────────────
+  STAR_LINES.forEach(function(pair) {
+    var s1   = STARS[pair[0]];
+    var s2   = STARS[pair[1]];
+    var sp1  = starSubpoint(s1.ra, s1.dec, date);
+    var sp2  = starSubpoint(s2.ra, s2.dec, date);
+    var pr1  = state.projection([sp1.lon, sp1.lat]);
+    var pr2  = state.projection([sp2.lon, sp2.lat]);
+    if (!pr1 || !pr2) return;
+    var pt1  = tr.apply(pr1);
+    var pt2  = tr.apply(pr2);
+    layer.append('line')
+      .attr('x1', pt1[0]).attr('y1', pt1[1])
+      .attr('x2', pt2[0]).attr('y2', pt2[1])
+      .attr('stroke', 'rgba(180,210,255,0.30)')
+      .attr('stroke-width', 0.8)
+      .attr('pointer-events', 'none');
+  });
+
+  // ── Иконки звёзд ─────────────────────────────────────────
+  STARS.forEach(function(star) {
+    var sp   = starSubpoint(star.ra, star.dec, date);
+    var proj = state.projection([sp.lon, sp.lat]);
+    if (!proj) return;
+    var pt   = tr.apply(proj);
+    var px   = pt[0], py = pt[1];
+
+    // Свечение для ярких звёзд (r ≥ 4)
+    if (star.r >= 4) {
+      layer.append('circle')
+        .attr('cx', px).attr('cy', py)
+        .attr('r', star.r + 5)
+        .attr('fill', star.color)
+        .attr('opacity', 0.10)
+        .attr('pointer-events', 'none');
+    }
+
+    // Кружок звезды
+    layer.append('circle')
+      .attr('cx', px).attr('cy', py)
+      .attr('r', star.r)
+      .attr('fill', star.color)
+      .attr('opacity', 0.88)
+      .attr('stroke', 'rgba(0,0,0,0.4)')
+      .attr('stroke-width', 0.5)
+      .attr('pointer-events', 'none');
+
+    // Символ ✦ внутри
+    layer.append('text')
+      .attr('x', px).attr('y', py)
+      .attr('dy', '0.38em')
+      .attr('text-anchor', 'middle')
+      .attr('font-size', Math.max(star.r - 1, 4) + 'px')
+      .attr('fill', 'rgba(255,255,255,0.75)')
+      .attr('pointer-events', 'none')
+      .text('✦');
+
+    // Подпись для ярких звёзд
+    if (star.r >= 4) {
+      layer.append('text')
+        .attr('x', px + star.r + 3)
+        .attr('y', py - star.r - 1)
+        .attr('fill', star.color)
+        .attr('font-size', '8px')
+        .attr('font-family', 'monospace')
+        .attr('opacity', 0.80)
+        .attr('pointer-events', 'none')
+        .text(star.name[state.lang] || star.name.ru);
+    }
+  });
+}
+
+/**
  * Главный рендер всех астро-слоёв.
  */
 function renderAstro() {
   renderNight();
 
-  ['sun','moon','planets'].forEach(function(id) {
+  ['sun','moon','planets','stars'].forEach(function(id) {
     state.svg.select('#layer-' + id).selectAll('*').remove();
   });
 
@@ -833,6 +1093,9 @@ function renderAstro() {
         .text(pl.label[state.lang] || pl.label.ru);
     });
   }
+
+  // Звёзды рисуются последними (поверх планет — они фоновые объекты)
+  renderStars();
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1044,6 +1307,10 @@ async function init() {
   });
   document.getElementById('chk-planets').addEventListener('change', function(e) {
     state.astro.showPlanets = e.target.checked;
+    updateAstroTimePanel(); renderAstro();
+  });
+  document.getElementById('chk-stars').addEventListener('change', function(e) {
+    state.astro.showStars = e.target.checked;
     updateAstroTimePanel(); renderAstro();
   });
 
