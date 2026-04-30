@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!--
   Файл    : frontend/index.html
-  Версия  : 1.5.0 (HTML_V=6)
-  Изменения: добавлен чекбокс chk-stars (✦ Звёзды)
+  Версия  : 1.6.0 (HTML_V=7)
+  Изменения: добавлен chk-routes (✈ Маршруты рейсов) + div#route-tooltip
 -->
 <html lang="ru">
 <head>
@@ -68,6 +68,12 @@
         <span class="checkbox-custom"></span>
         <span data-i18n="rulerChk">📏 Линейка расстояний</span>
       </label>
+      <!-- Маршруты рейсов — дуги великого круга -->
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-routes">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="routesChk">✈ Маршруты рейсов</span>
+      </label>
     </div>
 
     <!-- Чекбоксы астрономии — ОТДЕЛЬНЫЕ -->
@@ -131,15 +137,12 @@
 
       <!-- Три кнопки анимации -->
       <div style="display:flex; gap:5px;">
-        <!-- Суточная анимация: шаг +1ч, 24 кадра = 1 сутки за ~2 сек -->
         <button id="btn-play-hour"     class="btn-preset"
                 style="flex:1; padding:5px 2px; font-size:10px;"
                 title="Суточная анимация: шаг 1 час">▶ 1ч</button>
-        <!-- Годовая анимация: шаг +24ч, 365 кадров = 1 год за ~29 сек -->
         <button id="btn-play-day"      class="btn-preset"
                 style="flex:1; padding:5px 2px; font-size:10px;"
                 title="Годовая анимация: шаг 1 сутки">▶ 24ч</button>
-        <!-- Звёздные сутки: шаг +23ч 56м 4с — небесная сфера делает ровно 1 оборот -->
         <button id="btn-play-sidereal" class="btn-preset"
                 style="flex:1; padding:5px 2px; font-size:10px;"
                 title="Звёздные сутки: шаг 23ч 56м 4с">▶ ☆сут</button>
@@ -188,5 +191,29 @@
   <div id="map">
     <button id="btn-ruler-map" class="map-overlay-btn" title="📏">📏</button>
   </div>
+
+  <!--
+    Плавающий тултип маршрута.
+    Показывается при hover/click на линию рейса.
+    Позиционируется в JS через style.left/top.
+    pointer-events:none — чтобы не мешал зуму и линейке.
+  -->
+  <div id="route-tooltip" style="
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    background: rgba(0,8,28,0.93);
+    border: 1px solid #3a8abf;
+    border-radius: 6px;
+    padding: 8px 12px;
+    pointer-events: none;
+    font-size: 11px;
+    color: #e0f0ff;
+    font-family: monospace;
+    min-width: 170px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.6);
+    line-height: 1.5;
+  "></div>
+
 </body>
 </html>

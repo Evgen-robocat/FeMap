@@ -1,34 +1,28 @@
 /**
  * Файл    : frontend/static/map.js
- * Версия  : 5.4.0
+ * Версия  : 5.5.0
  * Автор   : Евгений / Claude
  *
+ * ИЗМЕНЕНИЯ v5.5.0:
+ *   - ROUTES: 15 реальных маршрутов (Qantas, JAL, ANA, BA, Emirates и др.)
+ *   - layer-routes внутри map-content (масштабируется с зумом)
+ *   - Дуги великого круга через d3.geoPath + LineString
+ *   - Тултип по hover/click: имя рейса, авиакомпания, 🌍 Сфера vs 📐 AE
+ *   - chk-routes чекбокс (state.showRoutes)
+ *   - renderRoutes(), showRouteTooltip(), hideRouteTooltip()
+ *   - handleMapClick() теперь скрывает тултип при клике мимо маршрута
+ *
  * ИЗМЕНЕНИЯ v5.4.0:
- *   - Отображение ярких звёзд ✦ (chk-stars → layer-stars)
- *   - STARS: 25 звёзд — Ковш (α..η UMa), Полярная, Вега, Арктур,
- *     Сириус, Орион (6 звёзд), Южный Крест (4), Канопус, Ахернар,
- *     α/β Центавра
- *   - STAR_LINES: линии созвездий (Ковш, Орион, Южный Крест)
- *   - starSubpoint(ra_hours, dec, date): субточка через GMST,
- *     не требует astronomy-engine (fallback-формула)
- *   - renderStars(): слой layer-stars (оверлей, не масштабируется)
- *   - astroAnyOn() и updateAstroTimePanel() учитывают showStars
- *   - state.astro.showStars: false
+ *   - Звёзды: chk-stars → layer-stars → renderStars()
+ *   - STARS (25 звёзд) + STAR_LINES
+ *   - starSubpoint() через GMST
  *
  * ИЗМЕНЕНИЯ v5.3.0:
- *   - Три независимых режима анимации:
- *       ▶ 1ч   — суточная (шаг +1ч,  80 мс, сутки за ~2 сек)
- *       ▶ 24ч  — годовая  (шаг +24ч, 80 мс, год   за ~29 сек)
- *       ▶ ☆сут — звёздные сутки (шаг 23ч 56м 4с = 86164с, 80 мс)
- *   - Кнопки: btn-play-hour / btn-play-day / btn-play-sidereal
- *   - Подсказка активного режима в #astro-mode-hint
- *   - state.astro.playMode: null | 'hour' | 'day' | 'sidereal'
+ *   - Три режима анимации: ▶1ч / ▶24ч / ▶☆сут
+ *   - Годовой ползунок day-slider
  *
  * ИЗМЕНЕНИЯ v5.2.0:
- *   - Годовой ползунок (day-slider): шаг 1 сутки, охват 1 год
- *   - Плей +24ч каждые 80 мс (годовой таймлапс)
- *   - dayOfYear() — вспомогательная функция
- *   - setAstroDate() обновляет оба ползунка синхронно
+ *   - setAstroDate() синхронизирует оба ползунка
  *
  * ИЗМЕНЕНИЯ v5.1.1:
  *   - БАГ-ФИКС: null → new Astronomy.Observer(0, 0, 0)
@@ -36,12 +30,11 @@
  * ИЗМЕНЕНИЯ v5.1.0:
  *   - Солнце и день/ночь разделены: chk-sun / chk-night
  *   - Магнит линейки к астро-объектам
- *   - window.onAstronomyReady
  */
 
 'use strict';
 
-var VERSION = window.FEMAP_VERSION || '5.4.0';
+var VERSION = window.FEMAP_VERSION || '5.5.0';
 
 /* ═══════════════════════════════════════════════════════════════
    ЦВЕТА
@@ -75,131 +68,203 @@ var PLANETS = [
 
 /* ═══════════════════════════════════════════════════════════════
    ЗВЁЗДЫ — J2000 координаты (RA в часах, Dec в градусах)
-   Цвет по спектральному классу:
-     O → #9bb0ff (сине-фиолетовый)
-     B → #aabfff (голубовато-белый)
-     A → #cad7ff (белый)
-     F → #f8f7ff (желтовато-белый)
-     G → #fff4ea (жёлтый)
-     K → #ffd2a1 (оранжевый)
-     M → #ffcc6f (красно-оранжевый)
-   r — радиус иконки (3–5, пропорционально блеску)
-   label — подпись (только для r≥4)
 ═══════════════════════════════════════════════════════════════ */
 var STARS = [
   // ── Полярная звезда (α UMi) ──────────────────────────────
-  { ra: 2.5303, dec: 89.26, r:3, color:'#f8f7ff',  // F7
+  { ra: 2.5303, dec: 89.26, r:3, color:'#f8f7ff',
     name:{ru:'Полярная', en:'Polaris', de:'Polarstern'} },
-
-  // ── Ковш Большой Медведицы (α..η UMa) ───────────────────
-  // Индекс 1
-  { ra:11.0621, dec: 61.75, r:3, color:'#ffd2a1',  // K0  α UMa Дубхе
+  // ── Ковш Большой Медведицы (α..η UMa) ── индексы 1..7 ───
+  { ra:11.0621, dec: 61.75, r:3, color:'#ffd2a1',
     name:{ru:'Дубхе', en:'Dubhe', de:'Dubhe'} },
-  // Индекс 2
-  { ra:11.0307, dec: 56.38, r:2, color:'#cad7ff',  // A1  β UMa Мерак
+  { ra:11.0307, dec: 56.38, r:2, color:'#cad7ff',
     name:{ru:'Мерак', en:'Merak', de:'Merak'} },
-  // Индекс 3
-  { ra:11.8972, dec: 53.70, r:2, color:'#cad7ff',  // A0  γ UMa Фекда
+  { ra:11.8972, dec: 53.70, r:2, color:'#cad7ff',
     name:{ru:'Фекда', en:'Phecda', de:'Phecda'} },
-  // Индекс 4
-  { ra:12.2571, dec: 57.03, r:2, color:'#cad7ff',  // A3  δ UMa Мегрец
+  { ra:12.2571, dec: 57.03, r:2, color:'#cad7ff',
     name:{ru:'Мегрец', en:'Megrez', de:'Megrez'} },
-  // Индекс 5
-  { ra:12.9005, dec: 55.96, r:3, color:'#cad7ff',  // A0p ε UMa Алиот
+  { ra:12.9005, dec: 55.96, r:3, color:'#cad7ff',
     name:{ru:'Алиот', en:'Alioth', de:'Alioth'} },
-  // Индекс 6
-  { ra:13.3988, dec: 54.93, r:2, color:'#cad7ff',  // A2  ζ UMa Мицар
+  { ra:13.3988, dec: 54.93, r:2, color:'#cad7ff',
     name:{ru:'Мицар', en:'Mizar', de:'Mizar'} },
-  // Индекс 7
-  { ra:13.7923, dec: 49.31, r:3, color:'#aabfff',  // B3  η UMa Алькаид
+  { ra:13.7923, dec: 49.31, r:3, color:'#aabfff',
     name:{ru:'Алькаид', en:'Alkaid', de:'Alkaid'} },
-
-  // ── Вега (α Lyr) ─────────────────────────────────────────
-  // Индекс 8
-  { ra:18.6156, dec: 38.78, r:4, color:'#cad7ff',  // A0
+  // ── Вега (α Lyr) ── индекс 8
+  { ra:18.6156, dec: 38.78, r:4, color:'#cad7ff',
     name:{ru:'Вега', en:'Vega', de:'Wega'} },
-
-  // ── Арктур (α Boo) ───────────────────────────────────────
-  // Индекс 9
-  { ra:14.2610, dec: 19.18, r:4, color:'#ffd2a1',  // K1.5
+  // ── Арктур (α Boo) ── индекс 9
+  { ra:14.2610, dec: 19.18, r:4, color:'#ffd2a1',
     name:{ru:'Арктур', en:'Arcturus', de:'Arktur'} },
-
-  // ── Сириус (α CMa) ───────────────────────────────────────
-  // Индекс 10
-  { ra: 6.7525, dec:-16.72, r:5, color:'#cad7ff',  // A1
+  // ── Сириус (α CMa) ── индекс 10
+  { ra: 6.7525, dec:-16.72, r:5, color:'#cad7ff',
     name:{ru:'Сириус', en:'Sirius', de:'Sirius'} },
-
-  // ── Орион ────────────────────────────────────────────────
-  // Индекс 11  Ригель (β Ori)
-  { ra: 5.2423, dec: -8.20, r:4, color:'#aabfff',  // B8
+  // ── Орион ── индексы 11..16
+  { ra: 5.2423, dec: -8.20, r:4, color:'#aabfff',
     name:{ru:'Ригель', en:'Rigel', de:'Rigel'} },
-  // Индекс 12  Бетельгейзе (α Ori)
-  { ra: 5.9195, dec:  7.41, r:4, color:'#ffcc6f',  // M1
+  { ra: 5.9195, dec:  7.41, r:4, color:'#ffcc6f',
     name:{ru:'Бетельгейзе', en:'Betelgeuse', de:'Beteigeuze'} },
-  // Индекс 13  Беллатрикс (γ Ori)
-  { ra: 5.4189, dec:  6.34, r:3, color:'#aabfff',  // B2
+  { ra: 5.4189, dec:  6.34, r:3, color:'#aabfff',
     name:{ru:'Беллатрикс', en:'Bellatrix', de:'Bellatrix'} },
-  // Индекс 14  Минтака (δ Ori)
-  { ra: 5.5334, dec: -0.30, r:2, color:'#9bb0ff',  // O9
+  { ra: 5.5334, dec: -0.30, r:2, color:'#9bb0ff',
     name:{ru:'Минтака', en:'Mintaka', de:'Mintaka'} },
-  // Индекс 15  Алнилам (ε Ori)
-  { ra: 5.6035, dec: -1.20, r:3, color:'#aabfff',  // B0
+  { ra: 5.6035, dec: -1.20, r:3, color:'#aabfff',
     name:{ru:'Алнилам', en:'Alnilam', de:'Alnilam'} },
-  // Индекс 16  Альнитак (ζ Ori)
-  { ra: 5.6793, dec: -1.94, r:3, color:'#9bb0ff',  // O9
+  { ra: 5.6793, dec: -1.94, r:3, color:'#9bb0ff',
     name:{ru:'Альнитак', en:'Alnitak', de:'Alnitak'} },
-
-  // ── Южный Крест ───────────────────────────────────────────
-  // Индекс 17  α Cru (Акрукс)
-  { ra:12.4433, dec:-63.09, r:4, color:'#aabfff',  // B0.5
+  // ── Южный Крест ── индексы 17..20
+  { ra:12.4433, dec:-63.09, r:4, color:'#aabfff',
     name:{ru:'Акрукс', en:'Acrux', de:'Acrux'} },
-  // Индекс 18  β Cru (Мимоза)
-  { ra:12.7954, dec:-59.69, r:3, color:'#aabfff',  // B1
+  { ra:12.7954, dec:-59.69, r:3, color:'#aabfff',
     name:{ru:'Мимоза', en:'Mimosa', de:'Mimosa'} },
-  // Индекс 19  γ Cru (Гакрукс)
-  { ra:12.5194, dec:-57.11, r:3, color:'#ffcc6f',  // M3
+  { ra:12.5194, dec:-57.11, r:3, color:'#ffcc6f',
     name:{ru:'Гакрукс', en:'Gacrux', de:'Gacrux'} },
-  // Индекс 20  δ Cru
-  { ra:12.2524, dec:-58.75, r:2, color:'#aabfff',  // B2
+  { ra:12.2524, dec:-58.75, r:2, color:'#aabfff',
     name:{ru:'δ Кру', en:'δ Cru', de:'δ Cru'} },
-
-  // ── Канопус (α Car) ──────────────────────────────────────
-  // Индекс 21
-  { ra: 6.3992, dec:-52.70, r:5, color:'#f8f7ff',  // A9
+  // ── Канопус (α Car) ── индекс 21
+  { ra: 6.3992, dec:-52.70, r:5, color:'#f8f7ff',
     name:{ru:'Канопус', en:'Canopus', de:'Kanopus'} },
-
-  // ── Ахернар (α Eri) ──────────────────────────────────────
-  // Индекс 22
-  { ra: 1.6285, dec:-57.24, r:4, color:'#aabfff',  // B3
+  // ── Ахернар (α Eri) ── индекс 22
+  { ra: 1.6285, dec:-57.24, r:4, color:'#aabfff',
     name:{ru:'Ахернар', en:'Achernar', de:'Achernar'} },
-
-  // ── α Центавра (Rigil Kentaurus) ─────────────────────────
-  // Индекс 23
-  { ra:14.6601, dec:-60.83, r:4, color:'#fff4ea',  // G2
+  // ── α Центавра ── индекс 23
+  { ra:14.6601, dec:-60.83, r:4, color:'#fff4ea',
     name:{ru:'α Центавра', en:'α Centauri', de:'α Zentauri'} },
-
-  // ── β Центавра (Хадар) ───────────────────────────────────
-  // Индекс 24
-  { ra:14.0637, dec:-60.37, r:4, color:'#aabfff',  // B1
+  // ── β Центавра (Хадар) ── индекс 24
+  { ra:14.0637, dec:-60.37, r:4, color:'#aabfff',
     name:{ru:'Хадар', en:'Hadar', de:'Hadar'} },
 ];
 
-/**
- * Линии созвездий — пары индексов из массива STARS.
- * Рисуются тонкими полупрозрачными линиями под иконками звёзд.
- */
 var STAR_LINES = [
-  // Ковш Большой Медведицы: чаша (α-β-γ-δ-α) + ручка (δ-ε-ζ-η)
   [1,2],[2,3],[3,4],[4,1],
   [4,5],[5,6],[6,7],
-  // Орион: пояс + плечи + нога
-  [14,15],[15,16],          // пояс: Минтака-Алнилам-Альнитак
-  [13,12],                  // плечи: Беллатрикс-Бетельгейзе
-  [13,14],[12,16],          // плечи к поясу
-  [11,14],                  // нога Ригель к поясу
-  // Южный Крест: две оси
-  [19,17],                  // вертикаль: Гакрукс-Акрукс
-  [20,18],                  // горизонталь: δCru-Мимоза
+  [14,15],[15,16],
+  [13,12],
+  [13,14],[12,16],
+  [11,14],
+  [19,17],
+  [20,18],
+];
+
+/* ═══════════════════════════════════════════════════════════════
+   МАРШРУТЫ САМОЛЁТОВ
+   15 реальных рейсов. from/to: [lon, lat] — порядок GeoJSON.
+   Дуги великого круга рисуются автоматически через d3.geoPath.
+   Дебатная ценность: маршруты южного полушария на AE-карте
+   выглядят аномально длинными — видно искажение проекции.
+═══════════════════════════════════════════════════════════════ */
+var ROUTES = [
+
+  // ── Южное полушарие ─ главный аргумент в дебатах ────────────
+  // Эти рейсы существуют, их время в воздухе соответствует
+  // сферическому расстоянию, но на AE-карте выглядят огромными.
+  {
+    id: 'SYD-SCL',
+    label:   { ru:'Сидней → Сантьяго',     en:'Sydney → Santiago',     de:'Sydney → Santiago'     },
+    airline: { ru:'Qantas/LATAM QF27',      en:'Qantas/LATAM QF27',     de:'Qantas/LATAM QF27'     },
+    from: [151.21, -33.87], to: [-70.67, -33.46],
+    color: '#ff6b35',
+  },
+  {
+    id: 'SYD-JNB',
+    label:   { ru:'Сидней → Йоханнесбург', en:'Sydney → Johannesburg',  de:'Sydney → Johannesburg' },
+    airline: { ru:'Qantas QF63',            en:'Qantas QF63',            de:'Qantas QF63'           },
+    from: [151.21, -33.87], to: [18.42, -26.20],
+    color: '#ff8c42',
+  },
+  {
+    id: 'JNB-PER',
+    label:   { ru:'Йоханнесбург → Перт',   en:'Johannesburg → Perth',   de:'Johannesburg → Perth'  },
+    airline: { ru:'South African Airways',  en:'South African Airways',  de:'South African Airways' },
+    from: [18.42, -26.20], to: [115.86, -31.95],
+    color: '#ffaa00',
+  },
+  {
+    id: 'GRU-JNB',
+    label:   { ru:'Сан-Паулу → Йоханнесбург', en:'São Paulo → Johannesburg', de:'São Paulo → Johannesburg' },
+    airline: { ru:'South African Airways SA221', en:'South African Airways SA221', de:'South African Airways SA221' },
+    from: [-46.63, -23.55], to: [18.42, -26.20],
+    color: '#ffcc00',
+  },
+  {
+    id: 'CPT-EZE',
+    label:   { ru:'Кейптаун → Буэнос-Айрес', en:'Cape Town → Buenos Aires', de:'Kapstadt → Buenos Aires' },
+    airline: { ru:'South African Airways SA225', en:'South African Airways SA225', de:'South African Airways SA225' },
+    from: [18.60, -33.97], to: [-58.37, -34.61],
+    color: '#ff3377',
+  },
+  {
+    id: 'AKL-EZE',
+    label:   { ru:'Окленд → Буэнос-Айрес', en:'Auckland → Buenos Aires', de:'Auckland → Buenos Aires' },
+    airline: { ru:'LATAM/Air New Zealand LA800', en:'LATAM/Air New Zealand LA800', de:'LATAM/Air New Zealand LA800' },
+    from: [174.79, -36.87], to: [-58.37, -34.61],
+    color: '#ff1155',
+  },
+  {
+    id: 'JNB-SYD',
+    label:   { ru:'Йоханнесбург → Сидней', en:'Johannesburg → Sydney',   de:'Johannesburg → Sydney'  },
+    airline: { ru:'Qantas QF64',            en:'Qantas QF64',             de:'Qantas QF64'            },
+    from: [18.42, -26.20], to: [151.21, -33.87],
+    color: '#ef9a9a',
+  },
+
+  // ── Транстихоокеанские — идут через Аляску/Сибирь ───────────
+  {
+    id: 'NRT-ORD',
+    label:   { ru:'Токио → Чикаго',         en:'Tokyo → Chicago',         de:'Tokio → Chicago'       },
+    airline: { ru:'All Nippon Airways NH9',  en:'All Nippon Airways NH9',  de:'All Nippon Airways NH9' },
+    from: [139.69, 35.68], to: [-87.63, 41.88],
+    color: '#4fc3f7',
+  },
+  {
+    id: 'NRT-LAX',
+    label:   { ru:'Токио → Лос-Анджелес',   en:'Tokyo → Los Angeles',     de:'Tokio → Los Angeles'   },
+    airline: { ru:'Japan Airlines JL60',     en:'Japan Airlines JL60',     de:'Japan Airlines JL60'   },
+    from: [139.69, 35.68], to: [-118.24, 34.05],
+    color: '#29b6f6',
+  },
+  {
+    id: 'AKL-LAX',
+    label:   { ru:'Окленд → Лос-Анджелес',  en:'Auckland → Los Angeles',  de:'Auckland → Los Angeles' },
+    airline: { ru:'Air New Zealand NZ5',     en:'Air New Zealand NZ5',     de:'Air New Zealand NZ5'   },
+    from: [174.79, -36.87], to: [-118.24, 34.05],
+    color: '#ba68c8',
+  },
+  {
+    id: 'SYD-DFW',
+    label:   { ru:'Сидней → Даллас',        en:'Sydney → Dallas',         de:'Sydney → Dallas'       },
+    airline: { ru:'Qantas QF8',             en:'Qantas QF8',              de:'Qantas QF8'            },
+    from: [151.21, -33.87], to: [-97.04, 32.90],
+    color: '#ff7043',
+  },
+
+  // ── Азия–Европа и трансатлантические ────────────────────────
+  {
+    id: 'NRT-LHR',
+    label:   { ru:'Токио → Лондон',         en:'Tokyo → London',          de:'Tokio → London'        },
+    airline: { ru:'Japan Airlines JL43',     en:'Japan Airlines JL43',     de:'Japan Airlines JL43'   },
+    from: [139.69, 35.68], to: [-0.46, 51.48],
+    color: '#81d4fa',
+  },
+  {
+    id: 'LHR-LAX',
+    label:   { ru:'Лондон → Лос-Анджелес',  en:'London → Los Angeles',    de:'London → Los Angeles'  },
+    airline: { ru:'British Airways BA269',   en:'British Airways BA269',   de:'British Airways BA269' },
+    from: [-0.46, 51.48], to: [-118.24, 34.05],
+    color: '#a5d6a7',
+  },
+  {
+    id: 'LHR-EZE',
+    label:   { ru:'Лондон → Буэнос-Айрес',  en:'London → Buenos Aires',   de:'London → Buenos Aires' },
+    airline: { ru:'British Airways BA245',   en:'British Airways BA245',   de:'British Airways BA245' },
+    from: [-0.46, 51.48], to: [-58.37, -34.61],
+    color: '#80cbc4',
+  },
+  {
+    id: 'DXB-LAX',
+    label:   { ru:'Дубай → Лос-Анджелес',   en:'Dubai → Los Angeles',     de:'Dubai → Los Angeles'   },
+    airline: { ru:'Emirates EK215',          en:'Emirates EK215',          de:'Emirates EK215'        },
+    from: [55.36, 25.25], to: [-118.24, 34.05],
+    color: '#ffd54f',
+  },
 ];
 
 /* ═══════════════════════════════════════════════════════════════
@@ -211,6 +276,7 @@ var LANG = {
     applyBtn:'▶ Применить центр',
     gridChk:'Сетка 30°', labelsChk:'Подписи координат',
     citiesChk:'🏙 Города и метки', rulerChk:'📏 Линейка расстояний',
+    routesChk:'✈ Маршруты рейсов',
     pointsTitle:'Управление точками',
     pointsName:'Название города или объекта',
     pointsLat:'Широта', pointsLon:'Долгота',
@@ -231,6 +297,7 @@ var LANG = {
     applyBtn:'▶ Apply Center',
     gridChk:'Grid 30°', labelsChk:'Coordinate Labels',
     citiesChk:'🏙 Cities & Labels', rulerChk:'📏 Distance Ruler',
+    routesChk:'✈ Flight Routes',
     pointsTitle:'Manage Points', pointsName:'City or object name',
     pointsLat:'Latitude', pointsLon:'Longitude',
     addBtn:'+ Add to Map', activePoints:'Active Points',
@@ -250,6 +317,7 @@ var LANG = {
     applyBtn:'▶ Mitte anwenden',
     gridChk:'Gitter 30°', labelsChk:'Koordinatenbeschriftung',
     citiesChk:'🏙 Städte & Labels', rulerChk:'📏 Entfernungslineal',
+    routesChk:'✈ Flugrouten',
     pointsTitle:'Punkte verwalten', pointsName:'Stadt- oder Objektname',
     pointsLat:'Breitengrad', pointsLon:'Längengrad',
     addBtn:'+ Zur Karte hinzufügen', activePoints:'Aktive Punkte',
@@ -306,11 +374,11 @@ var BORDERS_URL = '/data/borders.geojson';
    ШАГИ АНИМАЦИИ (миллисекунды)
 ═══════════════════════════════════════════════════════════════ */
 var ANIM_STEP = {
-  hour:     1 * 60 * 60 * 1000,   // 1 час      → сутки за ~2 сек (24 кадра × 80 мс)
-  day:      24 * 60 * 60 * 1000,  // 1 сутки    → год за ~29 сек (365 кадров × 80 мс)
-  sidereal: 86164 * 1000,         // 23ч 56м 4с → звёздные сутки, небесная сфера ровно 1 оборот
+  hour:     1 * 60 * 60 * 1000,   // 1 час
+  day:      24 * 60 * 60 * 1000,  // 1 сутки
+  sidereal: 86164 * 1000,         // 23ч 56м 4с — звёздные сутки
 };
-var ANIM_INTERVAL_MS = 80;         // интервал кадра (мс)
+var ANIM_INTERVAL_MS = 80;
 
 /* ═══════════════════════════════════════════════════════════════
    СОСТОЯНИЕ
@@ -318,6 +386,7 @@ var ANIM_INTERVAL_MS = 80;         // интервал кадра (мс)
 var state = {
   lat: 90, lon: 0,
   showGrid: true, showLabels: false, showCities: true,
+  showRoutes: false,      // ✈ маршруты самолётов
   land: null, borders: null,
   svg: null, projection: null, path: null,
   width: 0, height: 0, zoom: null,
@@ -329,11 +398,11 @@ var state = {
     distAE: null,
   },
   astro: {
-    showSun:     false,  // маркер Солнца ☀
-    showNight:   false,  // тень день/ночь (терминатор) — ОТДЕЛЬНО от Солнца
-    showMoon:    false,  // маркер Луны 🌙
-    showPlanets: false,  // маркеры планет 🪐
-    showStars:   false,  // яркие звёзды ✦
+    showSun:     false,
+    showNight:   false,
+    showMoon:    false,
+    showPlanets: false,
+    showStars:   false,
     date:        new Date(),
     playing:     false,
     playMode:    null,   // null | 'hour' | 'day' | 'sidereal'
@@ -346,16 +415,10 @@ var state = {
    АСТРОНОМИЧЕСКИЕ ВЫЧИСЛЕНИЯ
 ═══════════════════════════════════════════════════════════════ */
 
-/**
- * Проверяет загружен ли astronomy-engine.
- */
 function astroOk() {
   return typeof Astronomy !== 'undefined';
 }
 
-/**
- * Callback — вызывается из ver.js когда astronomy-engine загружен.
- */
 window.onAstronomyReady = function() {
   console.log('[map.js] astronomy-engine готов');
   if (state.astro.showMoon || state.astro.showPlanets) {
@@ -364,8 +427,7 @@ window.onAstronomyReady = function() {
 };
 
 /**
- * Субсолярная точка Солнца — встроенная формула, не требует библиотеки.
- * Точность ~1°. Fallback если astronomy-engine не загружен.
+ * Субсолярная точка — встроенная формула (fallback без astronomy-engine).
  */
 function sunSubpoint(date) {
   var JD   = date.getTime() / 86400000 + 2440587.5;
@@ -423,29 +485,18 @@ function moonIcon(date) {
 }
 
 /**
- * Субточка звезды по J2000 экваториальным координатам.
- * Не требует astronomy-engine — вычисляет GMST самостоятельно.
- * Если astronomy-engine доступен — использует его Sidereal Time
- * для большей точности.
- *
- * @param {number} ra_hours  Прямое восхождение (J2000) в часах (0..24)
- * @param {number} dec       Склонение (J2000) в градусах
- * @param {Date}   date      Текущий момент времени
- * @returns {{ lat: number, lon: number }}
+ * Субточка звезды по J2000 координатам (RA в часах, Dec в градусах).
  */
 function starSubpoint(ra_hours, dec, date) {
   var gstHours;
   if (astroOk()) {
-    // Высокоточный GMST через astronomy-engine
     gstHours = Astronomy.SiderealTime(date);
   } else {
-    // Аппроксимация — та же формула что в sunSubpoint
     var JD   = date.getTime() / 86400000 + 2440587.5;
     var n    = JD - 2451545.0;
     var UT   = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
     gstHours = ((6.697375 + 0.0657098242 * n + UT * 1.00273791) % 24 + 24) % 24;
   }
-  // lon = (RA - GMST) * 15°, нормализация к [-180, 180]
   var lon = (ra_hours - gstHours) * 15;
   lon = ((lon + 180) % 360 + 360) % 360 - 180;
   return { lat: dec, lon: lon };
@@ -488,36 +539,17 @@ function setAstroDate(date) {
   renderAstro();
 }
 
-/* ─── Три режима анимации ───────────────────────────────────
- *
- *  'hour'     → +1ч   каждые 80 мс → сутки за ~2 сек
- *  'day'      → +24ч  каждые 80 мс → год   за ~29 сек
- *  'sidereal' → +86164с каждые 80 мс → звёздные сутки,
- *               небесная сфера совершает ровно 1 оборот.
- *               Планеты, Луна и звёзды возвращаются на то же место.
- */
+/* ─── Три режима анимации ─────────────────────────────────── */
 
-/**
- * Запускает анимацию в указанном режиме.
- * Если этот же режим уже играет — ставит на паузу (toggle).
- * Если играет другой режим — сначала останавливает его.
- * @param {'hour'|'day'|'sidereal'} mode
- */
 function astroPlayMode(mode) {
-  // Toggle: нажали ту же кнопку — пауза
   if (state.astro.playing && state.astro.playMode === mode) {
     astroPause();
     return;
   }
-  // Остановить предыдущую анимацию (если была)
   astroPause();
-
   state.astro.playing  = true;
   state.astro.playMode = mode;
-
-  // Подсветить активную кнопку
   updatePlayButtons();
-
   var stepMs = ANIM_STEP[mode];
   state.astro.timer = setInterval(function() {
     setAstroDate(new Date(state.astro.date.getTime() + stepMs));
@@ -531,16 +563,8 @@ function astroPause() {
   updatePlayButtons();
 }
 
-/**
- * Обновляет вид кнопок анимации и подсказку режима.
- */
 function updatePlayButtons() {
-  var modes = ['hour', 'day', 'sidereal'];
-  var btnIds = {
-    hour:     'btn-play-hour',
-    day:      'btn-play-day',
-    sidereal: 'btn-play-sidereal',
-  };
+  var btnIds = { hour:'btn-play-hour', day:'btn-play-day', sidereal:'btn-play-sidereal' };
   var labels = {
     hour:     { ru:'▶ 1ч',   en:'▶ 1h',   de:'▶ 1h'   },
     day:      { ru:'▶ 24ч',  en:'▶ 24h',  de:'▶ 24h'  },
@@ -552,23 +576,18 @@ function updatePlayButtons() {
     sidereal: { ru:'⏸ ☆сут', en:'⏸ ☆sid', de:'⏸ ☆sid' },
   };
   var t = LANG[state.lang];
-  modes.forEach(function(m) {
+  ['hour','day','sidereal'].forEach(function(m) {
     var btn = document.getElementById(btnIds[m]);
     if (!btn) return;
     var active = state.astro.playing && state.astro.playMode === m;
     btn.textContent = active ? pauseLabels[m][state.lang] : labels[m][state.lang];
-    btn.style.background = active ? '#1a5a8a' : '';
+    btn.style.background  = active ? '#1a5a8a' : '';
     btn.style.borderColor = active ? '#3ab4ff' : '';
   });
-  // Подсказка активного режима
   var hint = document.getElementById('astro-mode-hint');
   if (hint) {
     if (state.astro.playing && state.astro.playMode) {
-      var modeKey = {
-        hour:     'modeHour',
-        day:      'modeDay',
-        sidereal: 'modeSidereal',
-      }[state.astro.playMode];
+      var modeKey = { hour:'modeHour', day:'modeDay', sidereal:'modeSidereal' }[state.astro.playMode];
       hint.textContent = t[modeKey] || '';
     } else {
       hint.textContent = '';
@@ -625,7 +644,6 @@ function applyLang() {
   document.querySelectorAll('.btn-lang').forEach(function(btn) {
     btn.classList.toggle('active', btn.dataset.lang === state.lang);
   });
-  // Обновить подписи кнопок плея (текущий язык)
   updatePlayButtons();
   if (state.projection) renderCities();
 }
@@ -644,13 +662,15 @@ function createSVG() {
     .style('display', 'block')
     .style('background', COLORS.background);
 
-  // Слои внутри map-content — масштабируются d3.zoom трансформом
+  // Слои внутри map-content — масштабируются d3.zoom трансформом.
+  // Порядок снизу вверх: вода → суша → границы → сетка →
+  //   ночь → маршруты → рамка диска
   var mc = state.svg.append('g').attr('id', 'map-content');
-  ['water','land','borders','grid','night','border'].forEach(function(id) {
+  ['water','land','borders','grid','night','routes','border'].forEach(function(id) {
     mc.append('g').attr('id', 'layer-' + id);
   });
 
-  // Оверлеи вне map-content — НЕ масштабируются, пересчитываются через zoom-transform
+  // Оверлеи вне map-content — не масштабируются, пересчитываются вручную
   ['labels','cities','ruler','sun','moon','planets','stars'].forEach(function(id) {
     state.svg.append('g').attr('id', 'layer-' + id);
   });
@@ -679,6 +699,8 @@ function setupZoom() {
       renderCities();
       renderRuler();
       renderAstro();
+      // Маршруты внутри map-content — масштабируются автоматически,
+      // перерисовывать не нужно
     });
   state.svg.call(state.zoom)
     .on('dblclick.zoom', function() { resetZoom(); });
@@ -861,6 +883,7 @@ function render() {
       .attr('stroke', COLORS.grid).attr('stroke-width',0.5).attr('opacity',0.7);
   }
 
+  // Рамка диска — всегда поверх остальных слоёв map-content
   var lbr = state.svg.select('#layer-border');
   lbr.selectAll('*').remove();
   lbr.append('path').datum({type:'Sphere'})
@@ -869,6 +892,7 @@ function render() {
 
   renderLabels();
   renderCities();
+  renderRoutes();   // маршруты — внутри map-content, перерисовываются при смене проекции
   renderRuler();
   renderAstro();
 }
@@ -898,12 +922,146 @@ function renderCities() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   АСТРО-РЕНДЕР
+   МАРШРУТЫ САМОЛЁТОВ
 ═══════════════════════════════════════════════════════════════ */
 
 /**
- * Ночная тень — geo-слой ВНУТРИ map-content.
+ * Показать тултип маршрута.
+ * Содержит: название, авиакомпания, 🌍 Сфера, 📐 AE-карта.
+ * Позиционируется рядом с курсором/тапом в экранных координатах.
  */
+function showRouteTooltip(event, route) {
+  var tip = document.getElementById('route-tooltip');
+  if (!tip) return;
+
+  var lang = state.lang;
+  var t    = LANG[lang];
+
+  // Сферическое расстояние (формула та же что в линейке)
+  var sphereKm = Math.round(d3.geoDistance(route.from, route.to) * 6371);
+
+  // AE-расстояние: пиксели между спроецированными точками / scale * 6371
+  var p1 = state.projection(route.from);
+  var p2 = state.projection(route.to);
+  var aeStr = '—';
+  if (p1 && p2) {
+    var aePx = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+    aeStr = Math.round(aePx / state.projection.scale() * 6371).toLocaleString();
+  }
+
+  tip.innerHTML =
+    '<div style="font-weight:bold;color:#ffe;margin-bottom:3px;">' +
+      (route.label[lang]   || route.label.en) + '</div>' +
+    '<div style="color:#7ab;font-size:9px;margin-bottom:6px;">' +
+      (route.airline[lang] || route.airline.en) + '</div>' +
+    '<div style="margin-bottom:2px;">' +
+      '🌍 ' + (t.sphereDist || 'Сфера') + ': <b>' +
+      sphereKm.toLocaleString() + '</b> ' + (t.km || 'км') +
+    '</div>' +
+    '<div style="color:#a0d8ef;">' +
+      '📐 ' + (t.aeDist || 'AE') + ': <b>' + aeStr + '</b> ' + (t.km || 'км') +
+    '</div>';
+
+  // Экранные координаты (работает и для mouse, и для синтетических click от touch)
+  var cx = event.clientX || 60;
+  var cy = event.clientY || 60;
+
+  // Смещение чтобы тултип не перекрывал палец/курсор
+  var tx = cx + 14;
+  var ty = cy + 14;
+  // Не уходить за правый/нижний край экрана
+  if (tx + 220 > window.innerWidth)  tx = cx - 226;
+  if (ty + 90  > window.innerHeight) ty = cy - 96;
+
+  tip.style.left    = tx + 'px';
+  tip.style.top     = ty + 'px';
+  tip.style.display = 'block';
+}
+
+/**
+ * Скрыть тултип маршрута.
+ */
+function hideRouteTooltip() {
+  var tip = document.getElementById('route-tooltip');
+  if (tip) tip.style.display = 'none';
+}
+
+/**
+ * Рисует маршруты в layer-routes (внутри map-content).
+ * Так как слой находится внутри map-content, при зуме все пути
+ * масштабируются автоматически — перерисовка при зуме не нужна.
+ *
+ * Для каждого маршрута:
+ *   1. Невидимая широкая полоса (14px) — зона попадания для hover/click
+ *   2. Видимая пунктирная дуга великого круга
+ *   3. Точки в начале и конце маршрута
+ *
+ * d3.geoPath автоматически строит дугу великого круга для LineString
+ * в азимутальной равноудалённой проекции.
+ */
+function renderRoutes() {
+  var layer = state.svg.select('#layer-routes');
+  layer.selectAll('*').remove();
+  if (!state.showRoutes) return;
+
+  ROUTES.forEach(function(route) {
+    // GeoJSON LineString — d3 нарисует дугу великого круга
+    var geom = {
+      type: 'LineString',
+      coordinates: [route.from, route.to],
+    };
+
+    // ── Невидимая зона для событий мыши/касания ──────────────
+    layer.append('path')
+      .datum(geom)
+      .attr('d', state.path)
+      .attr('fill', 'none')
+      .attr('stroke', 'transparent')
+      .attr('stroke-width', 14)
+      .style('cursor', 'pointer')
+      .on('mouseover', function(event) {
+        showRouteTooltip(event, route);
+      })
+      .on('mouseout', function() {
+        hideRouteTooltip();
+      })
+      .on('click', function(event) {
+        // stopPropagation: чтобы клик не попал в handleMapClick (линейка)
+        event.stopPropagation();
+        showRouteTooltip(event, route);
+      });
+
+    // ── Видимая линия маршрута ────────────────────────────────
+    layer.append('path')
+      .datum(geom)
+      .attr('d', state.path)
+      .attr('fill', 'none')
+      .attr('stroke', route.color)
+      .attr('stroke-width', 1.8)
+      .attr('stroke-dasharray', '6,3')
+      .attr('opacity', 0.85)
+      .attr('pointer-events', 'none');
+
+    // ── Точки конечных аэропортов ─────────────────────────────
+    [route.from, route.to].forEach(function(coord) {
+      var proj = state.projection(coord);
+      if (!proj) return;
+      layer.append('circle')
+        .attr('cx', proj[0])
+        .attr('cy', proj[1])
+        .attr('r', 2.5)
+        .attr('fill', route.color)
+        .attr('stroke', 'rgba(0,0,0,0.65)')
+        .attr('stroke-width', 0.8)
+        .attr('pointer-events', 'none');
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   АСТРО-РЕНДЕР
+═══════════════════════════════════════════════════════════════ */
+
 function renderNight() {
   var layer = state.svg.select('#layer-night');
   layer.selectAll('*').remove();
@@ -916,9 +1074,6 @@ function renderNight() {
     .attr('stroke-width', 1.0);
 }
 
-/**
- * Рисует маркер небесного тела на оверлей-слое.
- */
 function drawMarker(layerId, lon, lat, opts) {
   var layer = state.svg.select('#' + layerId);
   var proj  = state.projection([lon, lat]);
@@ -945,17 +1100,6 @@ function drawMarker(layerId, lon, lat, opts) {
     .text(lat.toFixed(1) + '° ' + lon.toFixed(1) + '°');
 }
 
-/**
- * Рендер ярких звёзд на оверлей-слое layer-stars.
- *
- * Каждая звезда:
- *   — субточка вычисляется через starSubpoint() (GMST)
- *   — кружок с цветом спектрального класса
- *   — иконка ✦ внутри
- *   — подпись для ярких (r ≥ 4) — справа вверх
- * Перед иконками рисуются линии созвездий (STAR_LINES) —
- * тонкие полупрозрачные, чтобы не мешать карте.
- */
 function renderStars() {
   var layer = state.svg.select('#layer-stars');
   layer.selectAll('*').remove();
@@ -964,17 +1108,16 @@ function renderStars() {
   var date = state.astro.date;
   var tr   = d3.zoomTransform(state.svg.node());
 
-  // ── Линии созвездий ──────────────────────────────────────
   STAR_LINES.forEach(function(pair) {
-    var s1   = STARS[pair[0]];
-    var s2   = STARS[pair[1]];
-    var sp1  = starSubpoint(s1.ra, s1.dec, date);
-    var sp2  = starSubpoint(s2.ra, s2.dec, date);
-    var pr1  = state.projection([sp1.lon, sp1.lat]);
-    var pr2  = state.projection([sp2.lon, sp2.lat]);
+    var s1  = STARS[pair[0]];
+    var s2  = STARS[pair[1]];
+    var sp1 = starSubpoint(s1.ra, s1.dec, date);
+    var sp2 = starSubpoint(s2.ra, s2.dec, date);
+    var pr1 = state.projection([sp1.lon, sp1.lat]);
+    var pr2 = state.projection([sp2.lon, sp2.lat]);
     if (!pr1 || !pr2) return;
-    var pt1  = tr.apply(pr1);
-    var pt2  = tr.apply(pr2);
+    var pt1 = tr.apply(pr1);
+    var pt2 = tr.apply(pr2);
     layer.append('line')
       .attr('x1', pt1[0]).attr('y1', pt1[1])
       .attr('x2', pt2[0]).attr('y2', pt2[1])
@@ -983,7 +1126,6 @@ function renderStars() {
       .attr('pointer-events', 'none');
   });
 
-  // ── Иконки звёзд ─────────────────────────────────────────
   STARS.forEach(function(star) {
     var sp   = starSubpoint(star.ra, star.dec, date);
     var proj = state.projection([sp.lon, sp.lat]);
@@ -991,7 +1133,6 @@ function renderStars() {
     var pt   = tr.apply(proj);
     var px   = pt[0], py = pt[1];
 
-    // Свечение для ярких звёзд (r ≥ 4)
     if (star.r >= 4) {
       layer.append('circle')
         .attr('cx', px).attr('cy', py)
@@ -1000,8 +1141,6 @@ function renderStars() {
         .attr('opacity', 0.10)
         .attr('pointer-events', 'none');
     }
-
-    // Кружок звезды
     layer.append('circle')
       .attr('cx', px).attr('cy', py)
       .attr('r', star.r)
@@ -1010,8 +1149,6 @@ function renderStars() {
       .attr('stroke', 'rgba(0,0,0,0.4)')
       .attr('stroke-width', 0.5)
       .attr('pointer-events', 'none');
-
-    // Символ ✦ внутри
     layer.append('text')
       .attr('x', px).attr('y', py)
       .attr('dy', '0.38em')
@@ -1020,8 +1157,6 @@ function renderStars() {
       .attr('fill', 'rgba(255,255,255,0.75)')
       .attr('pointer-events', 'none')
       .text('✦');
-
-    // Подпись для ярких звёзд
     if (star.r >= 4) {
       layer.append('text')
         .attr('x', px + star.r + 3)
@@ -1036,9 +1171,6 @@ function renderStars() {
   });
 }
 
-/**
- * Главный рендер всех астро-слоёв.
- */
 function renderAstro() {
   renderNight();
 
@@ -1094,7 +1226,6 @@ function renderAstro() {
     });
   }
 
-  // Звёзды рисуются последними (поверх планет — они фоновые объекты)
   renderStars();
 }
 
@@ -1102,6 +1233,9 @@ function renderAstro() {
    ЛИНЕЙКА
 ═══════════════════════════════════════════════════════════════ */
 function handleMapClick(event) {
+  // Скрыть тултип маршрута при любом клике на карту
+  hideRouteTooltip();
+
   if (!state.ruler.active) return;
 
   var pt = d3.pointer(event, state.svg.node());
@@ -1288,6 +1422,13 @@ async function init() {
     toggleRuler(e.target.checked);
   });
 
+  // Чекбокс маршрутов самолётов
+  document.getElementById('chk-routes').addEventListener('change', function(e) {
+    state.showRoutes = e.target.checked;
+    hideRouteTooltip();
+    render();
+  });
+
   document.getElementById('btn-ruler-map').addEventListener('click', function() {
     toggleRuler(!state.ruler.active);
   });
@@ -1392,7 +1533,7 @@ async function init() {
   applyLang();
 }
 
-// map.js грузится динамически через ver.js — DOMContentLoaded мог уже сработать
+// map.js грузится динамически — DOMContentLoaded мог уже сработать
 if (document.readyState === 'loading') {
   window.addEventListener('DOMContentLoaded', init);
 } else {

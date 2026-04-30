@@ -1,15 +1,15 @@
 /**
  * Файл    : frontend/static/ver.js
- * Версия  : 5.4.0
+ * Версия  : 5.5.0
  *
  * Цепочка: d3 → map.js (сразу)
  *          d3 → astronomy.min.js (параллельно, локально)
  */
 (function () {
-  var APP_VERSION = '5.4.0';
-  var MAP_V       = '55';
+  var APP_VERSION = '5.5.0';
+  var MAP_V       = '56';
   var CSS_V       = '40';
-  var HTML_V      = '6';   // index.html: добавлен chk-stars (✦ Звёзды)
+  var HTML_V      = '7';   // index.html: добавлен chk-routes (✈ Маршруты рейсов) + route-tooltip
 
   var link = document.createElement('link');
   link.rel  = 'stylesheet';
