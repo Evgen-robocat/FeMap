@@ -1,15 +1,39 @@
 <!DOCTYPE html>
 <!--
   Файл    : frontend/index.html
-  Версия  : 1.6.0 (HTML_V=7)
-  Изменения: добавлен chk-routes (✈ Маршруты рейсов) + div#route-tooltip
+  Версия  : 1.9.0 (HTML_V=10)
+  Изменения 5.8.0: cache-bust ?v=580 — МКС трекинг, satellite.js 4.1.3,
+                   chk-iss, btn-play-iss, iss-speed-btns, slider-iss-speed,
+                   iss-tooltip
 -->
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FlatEarthMap</title>
-  <script src="static/ver.js"></script>
+
+  <!-- 1. Стили — первыми чтобы не было мигания -->
+  <link rel="stylesheet" href="/static/style.css?v=580">
+
+  <!-- 2. D3.js v7 — до всех map-скриптов, они зависят от d3.* -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+
+  <!-- 3. Astronomy-engine — до astro.js, astroOk() проверяет его наличие -->
+  <script src="https://cdn.jsdelivr.net/npm/astronomy-engine@2/astronomy.browser.js"></script>
+
+  <!-- 4. satellite.js 4.1.3 — SGP4-пропагатор для МКС (v5.8.0)
+       Должен быть загружен до astro.js (satelliteOk() и loadIssTle()) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/4.1.3/satellite.min.js"></script>
+
+  <!-- 5. Модули карты — строго в этом порядке:
+       config → state → astro → render → main
+       Каждый следующий видит глобальные переменные предыдущего -->
+  <script src="/static/config.js?v=580"></script>
+  <script src="/static/state.js?v=580"></script>
+  <script src="/static/astro.js?v=580"></script>
+  <script src="/static/render.js?v=580"></script>
+  <script src="/static/main.js?v=580"></script>
+
 </head>
 <body>
   <div id="controls">
@@ -21,6 +45,7 @@
         <button class="btn-lang" data-lang="de">DE</button>
       </span>
     </h2>
+
     <div class="control-group">
       <label for="inp-lat" data-i18n="latLabel">Широта центра</label>
       <div class="input-row">
@@ -29,6 +54,7 @@
         <button class="btn-sign" data-target="inp-lat" title="±">±</button>
       </div>
     </div>
+
     <div class="control-group">
       <label for="inp-lon" data-i18n="lonLabel">Долгота центра</label>
       <div class="input-row">
@@ -37,7 +63,9 @@
         <button class="btn-sign" data-target="inp-lon" title="±">±</button>
       </div>
     </div>
+
     <button id="btn-apply" class="btn-primary" data-i18n="applyBtn">▶ Применить центр</button>
+
     <div class="presets">
       <button class="btn-preset" data-lat="90"  data-lon="0"  data-i18n="presetN">Сев. полюс</button>
       <button class="btn-preset" data-lat="-90" data-lon="0"  data-i18n="presetS">Юж. полюс</button>
@@ -76,7 +104,7 @@
       </label>
     </div>
 
-    <!-- Чекбоксы астрономии — ОТДЕЛЬНЫЕ -->
+    <!-- Чекбоксы астрономии -->
     <div class="control-group checkbox-group"
          style="border-top:1px solid #1e3a5a; padding-top:6px; margin-top:4px;">
       <label class="checkbox-label">
@@ -98,6 +126,12 @@
         <input type="checkbox" id="chk-planets">
         <span class="checkbox-custom"></span>
         <span>🪐 Планеты</span>
+      </label>
+      <!-- МКС (v5.8.0) — после Планет, перед Звёздами -->
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-iss">
+        <span class="checkbox-custom"></span>
+        <span>🛰 МКС</span>
       </label>
       <label class="checkbox-label">
         <input type="checkbox" id="chk-stars">
@@ -135,8 +169,8 @@
         <button id="btn-astro-next" class="btn-preset" style="flex:1;padding:5px 2px;">День →</button>
       </div>
 
-      <!-- Три кнопки анимации -->
-      <div style="display:flex; gap:5px;">
+      <!-- Четыре кнопки анимации — v5.8.0: добавлена ▶ МКС -->
+      <div style="display:flex; gap:5px; margin-bottom:4px;">
         <button id="btn-play-hour"     class="btn-preset"
                 style="flex:1; padding:5px 2px; font-size:10px;"
                 title="Суточная анимация: шаг 1 час">▶ 1ч</button>
@@ -146,15 +180,40 @@
         <button id="btn-play-sidereal" class="btn-preset"
                 style="flex:1; padding:5px 2px; font-size:10px;"
                 title="Звёздные сутки: шаг 23ч 56м 4с">▶ ☆сут</button>
+        <button id="btn-play-iss"      class="btn-preset"
+                style="flex:1; padding:5px 2px; font-size:10px; color:#00ff88;"
+                title="МКС: шаг 1 мин × скорость">▶ МКС</button>
+      </div>
+
+      <!-- Блок скорости МКС — виден только при mode=iss (v5.8.0)
+           display:none при инициализации; управляется из updatePlayButtons() -->
+      <div id="iss-speed-btns"
+           style="display:none; flex-wrap:wrap; gap:4px; margin-bottom:4px;">
+        <!-- Кнопки ×N: id=btn-iss-speed-{N}, N из ISS_SPEED_OPTIONS -->
+        <button id="btn-iss-speed-1"   class="btn-preset"
+                style="flex:1; padding:4px 2px; font-size:10px; min-width:34px;">×1</button>
+        <button id="btn-iss-speed-10"  class="btn-preset"
+                style="flex:1; padding:4px 2px; font-size:10px; min-width:34px;">×10</button>
+        <button id="btn-iss-speed-20"  class="btn-preset"
+                style="flex:1; padding:4px 2px; font-size:10px; min-width:34px;">×20</button>
+        <button id="btn-iss-speed-100" class="btn-preset"
+                style="flex:1; padding:4px 2px; font-size:10px; min-width:34px;">×100</button>
+        <!-- Непрерывный слайдер скорости 1..100; синхронизирован с кнопками -->
+        <div style="width:100%; display:flex; align-items:center; gap:4px;">
+          <span style="font-size:9px; color:#00ff88; min-width:28px;">×скор</span>
+          <input type="range" id="slider-iss-speed"
+                 min="1" max="100" value="1" step="1"
+                 style="flex:1; accent-color:#00ff88;">
+        </div>
       </div>
 
       <!-- Подсказка активного режима -->
       <div id="astro-mode-hint"
            style="font-size:9px; color:#5a8a9a; text-align:center;
-                  margin-top:3px; min-height:12px;">
-      </div>
+                  margin-top:3px; min-height:12px;"></div>
     </div>
 
+    <!-- Форма добавления точек -->
     <div class="user-points-form">
       <h3 data-i18n="pointsTitle">Управление точками</h3>
       <div class="control-group">
@@ -185,9 +244,11 @@
         <ul id="points-list" class="points-list"></ul>
       </div>
     </div>
+
     <div id="status" class="status-bar">…</div>
   </div>
 
+  <!-- Карта -->
   <div id="map">
     <button id="btn-ruler-map" class="map-overlay-btn" title="📏">📏</button>
   </div>
@@ -212,6 +273,28 @@
     font-family: monospace;
     min-width: 170px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.6);
+    line-height: 1.5;
+  "></div>
+
+  <!--
+    Плавающий тултип МКС (v5.8.0).
+    Показывается при hover/click на маркер МКС в слое layer-iss.
+    pointer-events:none — не блокирует взаимодействие с картой.
+  -->
+  <div id="iss-tooltip" style="
+    display: none;
+    position: fixed;
+    z-index: 1001;
+    background: rgba(0,8,28,0.93);
+    border: 1px solid #00ff88;
+    border-radius: 6px;
+    padding: 8px 12px;
+    pointer-events: none;
+    font-size: 11px;
+    color: #e0f0ff;
+    font-family: monospace;
+    min-width: 130px;
+    box-shadow: 0 2px 12px rgba(0,255,136,0.25);
     line-height: 1.5;
   "></div>
 
