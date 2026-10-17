@@ -1,7 +1,18 @@
 /**
  * Файл    : frontend/static/render.js
- * Версия  : 5.8.0
+ * Версия  : 5.9.0
  * Модуль  : Рендеринг SVG-карты
+ *
+ * Изменения 5.9.0:
+ *   - createSVG(): слой 'milkyway' внутри map-content (между night и routes),
+ *     поэтому зум применяется SVG-трансформом и путь при зуме не пересчитывается
+ *   - renderMilkyWay() — Млечный Путь: пять вложенных полигонов-изофот,
+ *     рисуются через проекцию, повёрнутую на GST: rotate([-lon - GST, -lat]).
+ *     Геометрия в градусах RA/Dec не пересчитывается — D3 сам режет
+ *     полигоны по clipAngle и на антиподе при любом центре.
+ *     Кеш-ключ в state.milkyway.key: перерисовка только при смене центра,
+ *     времени или размеров проекции.
+ *   - renderAstro() — вызов renderMilkyWay() сразу после renderNight()
  *
  * Изменения 5.8.0:
  *   - createSVG(): SVG-слои 'trail-iss' (между trail-planets и sun)
@@ -30,6 +41,7 @@
  *   - renderCities()        — города / точки
  *   - renderRoutes()        — маршруты
  *   - renderNight()         — ночная тень
+ *   - renderMilkyWay()      — Млечный Путь (v5.9.0)
  *   - renderTrails()        — диспетчер хвостов
  *   - renderTrailPolyline() — хвост через polyline
  *   - renderTrailPath()     — хвост через geoPath (дуги)
@@ -68,7 +80,8 @@ function createSVG() {
 
   // Слои внутри map-content — масштабируются d3.zoom трансформом.
   var mc = state.svg.append('g').attr('id', 'map-content');
-  ['water','land','borders','grid','night','routes','border'].forEach(function(id) {
+  // milkyway (v5.9.0): над ночной тенью, под маршрутами и рамкой диска
+  ['water','land','borders','grid','night','milkyway','routes','border'].forEach(function(id) {
     mc.append('g').attr('id', 'layer-' + id);
   });
 
@@ -341,6 +354,66 @@ function renderNight() {
     .attr('fill', 'rgba(0,8,28,0.50)')
     .attr('stroke', 'rgba(100,180,255,0.45)')
     .attr('stroke-width', 1.0);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   МЛЕЧНЫЙ ПУТЬ (v5.9.0)
+═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Рисует Млечный Путь как набор вложенных полупрозрачных полигонов.
+ *
+ * Точка неба (RA, Dec) лежит над точкой Земли lon = RA - GST, lat = Dec,
+ * то есть переход «небо → Земля» — это только сдвиг по долготе на -GST.
+ * Сдвиг по долготе — вращение вокруг оси полюсов, поэтому его можно
+ * свернуть в проекцию: rotate([-state.lon - GST, -state.lat]) вместо
+ * того, чтобы пересчитывать ~30 тыс. вершин на каждом кадре.
+ * Смена центра проекции учитывается тем же rotate — отдельной логики нет.
+ *
+ * Слой лежит внутри map-content: зум делает SVG-трансформ.
+ * Перерисовка пропускается, если не менялись центр, время и размеры
+ * проекции (ключ state.milkyway.key) — в первую очередь при зуме и пане.
+ */
+function renderMilkyWay() {
+  var layer = state.svg.select('#layer-milkyway');
+  var mw    = state.milkyway;
+
+  if (!state.astro.showMilkyWay) {
+    if (mw.key !== null) { layer.selectAll('*').remove(); mw.key = null; }
+    return;
+  }
+  /* Данные грузятся лениво (main.js → loadMilkyWay), после загрузки
+     он сам вызовет renderAstro() */
+  if (!mw.data || !mw.data.features) return;
+
+  var gst   = gstHours(state.astro.date) * 15;   // градусы
+  var scale = state.projection.scale();
+  var tr    = state.projection.translate();
+
+  var key = [
+    state.lon, state.lat, gst.toFixed(4),
+    scale.toFixed(2), tr[0].toFixed(1), tr[1].toFixed(1)
+  ].join('|');
+  if (key === mw.key) return;
+  mw.key = key;
+
+  var skyProj = d3.geoAzimuthalEquidistant()
+    .rotate([-state.lon - gst, -state.lat])
+    .scale(scale)
+    .translate(tr)
+    .clipAngle(179.9);
+  var skyPath = d3.geoPath(skyProj);
+
+  var ops = MILKYWAY_STYLE.opacity;
+  layer.selectAll('path')
+    .data(mw.data.features)
+    .join('path')
+    .attr('d', skyPath)
+    .attr('fill', MILKYWAY_STYLE.color)
+    .attr('fill-opacity', function(d, i) { return ops[Math.min(i, ops.length - 1)]; })
+    .attr('fill-rule', 'evenodd')
+    .attr('stroke', 'none')
+    .attr('pointer-events', 'none');
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -739,6 +812,7 @@ function renderStars() {
  */
 function renderAstro() {
   renderNight();
+  renderMilkyWay(); // v5.9.0
 
   /* Очищаем хвостовые слои */
   ['trail-sun','trail-moon','trail-stars','trail-planets','trail-iss'].forEach(function(id) {

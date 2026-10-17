@@ -1,7 +1,15 @@
 /**
  * Файл    : frontend/static/main.js
- * Версия  : 5.8.0
+ * Версия  : 5.9.0
  * Модуль  : Инициализация, события, точки, утилиты
+ *
+ * Изменения 5.9.0:
+ *   - loadMilkyWay() — ленивая загрузка MILKYWAY_URL при первом включении
+ *       чекбокса; при ошибке чекбокс и флаг откатываются, строка статуса
+ *       сообщает причину
+ *   - init() — добавлен chk-milkyway (state.astro.showMilkyWay) и
+ *       обработчик, вызывающий loadMilkyWay(). В загрузку при старте
+ *       Млечный Путь НЕ входит (~150 КБ, слой выключен по умолчанию)
  *
  * Изменения 5.8.0:
  *   - injectTrailControls() — добавлена строка МКС:
@@ -34,6 +42,7 @@
  *   - refreshPointsList()       — обновление DOM-списка точек
  *   - addPoint()                — добавление точки пользователем
  *   - loadData()                — загрузка GeoJSON + localStorage
+ *   - loadMilkyWay()            — ленивая загрузка Млечного Пути (v5.9.0)
  *   - applyLang()               — применение языка к DOM
  *   - applyCenter()             — смена центра карты
  *   - setStatus()               — обновление строки статуса
@@ -163,6 +172,41 @@ async function loadData() {
     state.borders = { type:'FeatureCollection', features:[] };
     setStatus('Ошибка загрузки: ' + err.message);
   }
+}
+
+/**
+ * Ленивая загрузка контуров Млечного Пути (v5.9.0).
+ * Вызывается при включении чекбокса; повторные вызовы безопасны.
+ * После загрузки перерисовывает астро-слои.
+ */
+async function loadMilkyWay() {
+  var mw = state.milkyway;
+  if (mw.data || mw.loading) return;
+  mw.loading = true;
+
+  var statusEl = document.getElementById('status');
+  var prev     = statusEl ? statusEl.innerText : '';
+  setStatus(LANG[state.lang].loading);
+
+  try {
+    var data = await d3.json(MILKYWAY_URL);
+    if (!data || !data.features || !data.features.length) {
+      throw new Error('bad milkyway.json');
+    }
+    mw.data = data;
+    mw.key  = null;
+    setStatus(prev);
+  } catch(err) {
+    console.error('[main.js] milkyway:', err);
+    setStatus('Ошибка загрузки Млечного Пути: ' + err.message);
+    state.astro.showMilkyWay = false;
+    var chk = document.getElementById('chk-milkyway');
+    if (chk) chk.checked = false;
+    updateAstroTimePanel();
+  } finally {
+    mw.loading = false;
+  }
+  renderAstro();
 }
 
 /* ================================================================
@@ -578,6 +622,7 @@ async function init() {
     ['chk-planets', 'showPlanets'],
     ['chk-stars',   'showStars'  ],
     ['chk-iss',     'showIss'    ],  // v5.8.0
+    ['chk-milkyway','showMilkyWay'], // v5.9.0
   ].forEach(function(pair) {
     var el = document.getElementById(pair[0]);
     if (!el) return;
@@ -586,6 +631,12 @@ async function init() {
       updateAstroTimePanel();
       renderAstro();
     });
+  });
+
+  /* Млечный Путь — данные грузятся при первом включении (v5.9.0).
+     Слушатель стоит после общего, поэтому флаг уже выставлен. */
+  document.getElementById('chk-milkyway').addEventListener('change', function(e) {
+    if (e.target.checked) loadMilkyWay();
   });
 
   /* ── Ползунок UTC (суточный) ─────────────────────────────── */

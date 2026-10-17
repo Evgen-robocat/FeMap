@@ -1,7 +1,14 @@
 /**
  * Файл    : frontend/static/astro.js
- * Версия  : 5.8.0
+ * Версия  : 5.9.0
  * Модуль  : Астрономические вычисления и управление временем
+ *
+ * Изменения 5.9.0:
+ *   - gstHours(date)  — звёздное время по Гринвичу в часах (общий хелпер:
+ *                       astronomy-engine, при его отсутствии — формула).
+ *                       Раньше эта логика жила внутри starSubpoint().
+ *   - starSubpoint()  — использует gstHours(); результат не изменился
+ *   - astroAnyOn()    — добавлен showMilkyWay (панель времени нужна и ему)
  *
  * Изменения 5.8.0:
  *   - satelliteOk()          — проверяет наличие satellite.js
@@ -206,6 +213,21 @@ function moonIcon(date) {
 }
 
 /**
+ * Гринвичское звёздное время в часах (0..24). (v5.9.0)
+ * Любая точка неба (RA, Dec) лежит над точкой Земли с
+ * lon = RA - GST, lat = Dec — на этом строятся звёзды и Млечный Путь.
+ * @param {Date} date
+ * @returns {number}
+ */
+function gstHours(date) {
+  if (astroOk()) return Astronomy.SiderealTime(date);
+  var JD = date.getTime() / 86400000 + 2440587.5;
+  var n  = JD - 2451545.0;
+  var UT = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
+  return ((6.697375 + 0.0657098242 * n + UT * 1.00273791) % 24 + 24) % 24;
+}
+
+/**
  * Субточка звезды по J2000 координатам.
  * @param {number} ra_hours
  * @param {number} dec
@@ -213,16 +235,7 @@ function moonIcon(date) {
  * @returns {{ lat: number, lon: number }}
  */
 function starSubpoint(ra_hours, dec, date) {
-  var gstHours;
-  if (astroOk()) {
-    gstHours = Astronomy.SiderealTime(date);
-  } else {
-    var JD       = date.getTime() / 86400000 + 2440587.5;
-    var n        = JD - 2451545.0;
-    var UT       = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
-    gstHours     = ((6.697375 + 0.0657098242 * n + UT * 1.00273791) % 24 + 24) % 24;
-  }
-  var lon = (ra_hours - gstHours) * 15;
+  var lon = (ra_hours - gstHours(date)) * 15;
   lon = ((lon + 180) % 360 + 360) % 360 - 180;
   return { lat: dec, lon: lon };
 }
@@ -611,7 +624,8 @@ function updateIssSpeedButtons() {
 function astroAnyOn() {
   return state.astro.showSun    || state.astro.showNight  ||
          state.astro.showMoon   || state.astro.showPlanets ||
-         state.astro.showStars  || state.astro.showIss;    // v5.8.0
+         state.astro.showStars  || state.astro.showIss  ||  // v5.8.0
+         state.astro.showMilkyWay;                          // v5.9.0
 }
 
 /**

@@ -1,7 +1,16 @@
 /**
  * Файл    : frontend/static/state.js
- * Версия  : 5.8.0
+ * Версия  : 5.9.0
  * Модуль  : Глобальное состояние приложения
+ *
+ * Изменения 5.9.0:
+ *   - state.astro.showMilkyWay — флаг видимости Млечного Пути (default false)
+ *   - state.milkyway — { data, loading, key }:
+ *       data    — GeoJSON из MILKYWAY_URL (null пока не загружен)
+ *       loading — true во время загрузки (защита от двойного запроса)
+ *       key     — кеш-ключ последней отрисовки (renderMilkyWay пропускает
+ *                 перерисовку, если центр/время/проекция не менялись,
+ *                 в том числе при зуме)
  *
  * Изменения 5.8.0:
  *   - state.astro.showIss   — флаг видимости маркера МКС (default false)
@@ -46,6 +55,13 @@ var state = {
   land:    null,      // GeoJSON суши (загружается async)
   borders: null,      // GeoJSON границ (загружается async)
 
+  /* ── Млечный Путь (v5.9.0) — грузится лениво при первом включении ── */
+  milkyway: {
+    data:    null,    // GeoJSON изофот (MILKYWAY_URL)
+    loading: false,   // идёт загрузка
+    key:     null,    // кеш-ключ последней отрисовки
+  },
+
   /* ── D3 объекты ────────────────────────────────────────── */
   svg:        null,
   projection: null,
@@ -73,6 +89,7 @@ var state = {
     showPlanets: false,
     showStars:   false,
     showIss:     false,   // v5.8.0 — маркер субточки МКС
+    showMilkyWay: false,  // v5.9.0 — Млечный Путь
 
     date:        new Date(),   // текущий момент времени для расчётов
     playing:     false,

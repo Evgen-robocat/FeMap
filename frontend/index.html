@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <!--
   Файл    : frontend/index.html
-  Версия  : 1.9.0 (HTML_V=10)
+  Версия  : 1.10.0 (HTML_V=11)
+  Изменения 5.9.0: cache-bust ?v=590 — Млечный Путь: chk-milkyway
+                   (после «Звёзды»), данные /data/milkyway.json грузятся
+                   лениво при первом включении
   Изменения 5.8.0: cache-bust ?v=580 — МКС трекинг, satellite.js 4.1.3,
                    chk-iss, btn-play-iss, iss-speed-btns, slider-iss-speed,
                    iss-tooltip
@@ -13,7 +16,7 @@
   <title>FlatEarthMap</title>
 
   <!-- 1. Стили — первыми чтобы не было мигания -->
-  <link rel="stylesheet" href="/static/style.css?v=580">
+  <link rel="stylesheet" href="/static/style.css?v=590">
 
   <!-- 2. D3.js v7 — до всех map-скриптов, они зависят от d3.* -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
@@ -28,11 +31,11 @@
   <!-- 5. Модули карты — строго в этом порядке:
        config → state → astro → render → main
        Каждый следующий видит глобальные переменные предыдущего -->
-  <script src="/static/config.js?v=580"></script>
-  <script src="/static/state.js?v=580"></script>
-  <script src="/static/astro.js?v=580"></script>
-  <script src="/static/render.js?v=580"></script>
-  <script src="/static/main.js?v=580"></script>
+  <script src="/static/config.js?v=590"></script>
+  <script src="/static/state.js?v=590"></script>
+  <script src="/static/astro.js?v=590"></script>
+  <script src="/static/render.js?v=590"></script>
+  <script src="/static/main.js?v=590"></script>
 
 </head>
 <body>
@@ -137,6 +140,12 @@
         <input type="checkbox" id="chk-stars">
         <span class="checkbox-custom"></span>
         <span>✦ Звёзды</span>
+      </label>
+      <!-- Млечный Путь (v5.9.0) — после Звёзд -->
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-milkyway">
+        <span class="checkbox-custom"></span>
+        <span>🌌 Млечный Путь</span>
       </label>
     </div>
 
