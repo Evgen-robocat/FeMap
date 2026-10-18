@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <!--
   Файл    : frontend/index.html
-  Версия  : 1.12.0 (HTML_V=15)
+  Версия  : 1.13.0 (HTML_V=16)
+  Изменения 6.2.0: cache-bust ?v=620 — блок #planets-opts под «Планеты»: отдельный
+                   чекбокс на каждую планету (создаётся в main.js из PLANETS)
   Изменения 6.1.0: cache-bust ?v=610 — chk-zodiac-stars (звёзды и фигуры
                    созвездий) в блоке zodiac-opts; viewport без масштабирования
                    страницы (maximum-scale=1, user-scalable=no); данные
@@ -27,7 +29,7 @@
   <title>FlatEarthMap</title>
 
   <!-- 1. Стили — первыми чтобы не было мигания -->
-  <link rel="stylesheet" href="/static/style.css?v=610">
+  <link rel="stylesheet" href="/static/style.css?v=620">
 
   <!-- 2. D3.js v7 — до всех map-скриптов, они зависят от d3.* -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
@@ -42,11 +44,11 @@
   <!-- 5. Модули карты — строго в этом порядке:
        config → state → astro → render → main
        Каждый следующий видит глобальные переменные предыдущего -->
-  <script src="/static/config.js?v=610"></script>
-  <script src="/static/state.js?v=610"></script>
-  <script src="/static/astro.js?v=610"></script>
-  <script src="/static/render.js?v=610"></script>
-  <script src="/static/main.js?v=610"></script>
+  <script src="/static/config.js?v=620"></script>
+  <script src="/static/state.js?v=620"></script>
+  <script src="/static/astro.js?v=620"></script>
+  <script src="/static/render.js?v=620"></script>
+  <script src="/static/main.js?v=620"></script>
 
 </head>
 <body>
@@ -157,6 +159,7 @@
         <span class="checkbox-custom"></span>
         <span>🪐 Планеты</span>
       </label>
+      <div id="planets-opts" style="display:none; padding-left:22px;"></div>
       <!-- МКС (v5.8.0) — после Планет, перед Звёздами -->
       <label class="checkbox-label">
         <input type="checkbox" id="chk-iss">

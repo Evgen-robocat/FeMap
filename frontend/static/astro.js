@@ -1,7 +1,11 @@
 /**
  * Файл    : frontend/static/astro.js
- * Версия  : 6.0.0
+ * Версия  : 6.2.0
  * Модуль  : Астрономические вычисления и управление временем
+ *
+ * Изменения 6.2.0:
+ *   - planetOn(key) — планета показана: общий чекбокс включён и её собственный тоже;
+ *       используется в подсветке зодиака, хвостах и расчёте точек
  *
  * Изменения 6.0.0:
  *   - bodyRaDecJ2000(key, date) — геоцентрические RA/Dec тела в эпохе J2000
@@ -366,6 +370,12 @@ function zodiacFind(raDeg, dec) {
  * Солнце → Луна → планеты (порядок PLANETS).
  * @returns {Array<{ key, sym, color, label }>}
  */
+/** Планета показана: включён общий чекбокс и её собственный (v6.2.0). */
+function planetOn(key) {
+  var a = state.astro;
+  return !!(a.showPlanets && a.planetsOn && a.planetsOn[key] !== false);
+}
+
 function zodiacShownBodies() {
   var out = [];
   if (state.astro.showSun) {
@@ -376,6 +386,7 @@ function zodiacShownBodies() {
   }
   if (state.astro.showPlanets && astroOk()) {
     PLANETS.forEach(function(pl) {
+      if (!planetOn(pl.key)) return;
       out.push({ key:pl.key, sym:pl.sym, color:pl.color, label:pl.label });
     });
   }
@@ -397,7 +408,8 @@ function zodiacHighlights() {
   /* Кеш: renderAstro() вызывается и при каждом событии зума, а положения
      тел за это время не меняются — пересчитывать их незачем. */
   var key = [a.date.getTime(), a.showSun ? 1 : 0, a.showMoon ? 1 : 0,
-             a.showPlanets ? 1 : 0, astroOk() ? 1 : 0].join('|');
+             a.showPlanets ? 1 : 0, astroOk() ? 1 : 0,
+             PLANETS.map(function(pl) { return planetOn(pl.key) ? 1 : 0; }).join('')].join('|');
   if (_hlCache.key === key) return _hlCache.val;
 
   var val = zodiacShownBodies().map(function(b) {
@@ -462,6 +474,7 @@ function getAstroPoints() {
   }
   if (state.astro.showPlanets && astroOk()) {
     PLANETS.forEach(function(pl) {
+      if (!planetOn(pl.key)) return;
       var pp = bodySubpoint(pl.key, date);
       if (pp) result.push({ lon: pp.lon, lat: pp.lat });
     });
@@ -642,6 +655,7 @@ function setAstroDate(date, manual) {
     /* Планеты (v5.7.0) */
     if (state.astro.showPlanets && state.astro.trails.planets.enabled && astroOk()) {
       PLANETS.forEach(function(pl) {
+        if (!planetOn(pl.key)) return;
         var pp = bodySubpoint(pl.key, date);
         if (pp) appendPlanetTrailPoint(pl.key, pp.lon, pp.lat);
       });

@@ -1,7 +1,11 @@
 /**
  * Файл    : frontend/static/state.js
- * Версия  : 6.1.0
+ * Версия  : 6.2.0
  * Модуль  : Глобальное состояние приложения
+ *
+ * Изменения 6.2.0:
+ *   - state.astro.planetsOn — { Mercury:true, …, Neptune:true }: какие планеты
+ *       показывать, когда включён общий чекбокс «Планеты» (default — все)
  *
  * Изменения 6.1.0:
  *   - state.astro.zodiacStars — показывать звёзды и фигуры созвездий (default true)
@@ -124,6 +128,8 @@ var state = {
     showNight:   false,
     showMoon:    false,
     showPlanets: false,
+    planetsOn: { Mercury:true, Venus:true, Mars:true, Jupiter:true,
+                 Saturn:true, Uranus:true, Neptune:true },  // v6.2.0
     showStars:   false,
     showIss:     false,   // v5.8.0 — маркер субточки МКС
     showMilkyWay: false,  // v5.9.0 — Млечный Путь

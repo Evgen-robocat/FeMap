@@ -1,7 +1,12 @@
 /**
  * Файл    : frontend/static/main.js
- * Версия  : 6.1.0
+ * Версия  : 6.2.0
  * Модуль  : Инициализация, события, точки, утилиты
+ *
+ * Изменения 6.2.0:
+ *   - buildPlanetOpts() — под чекбоксом «Планеты» создаёт чекбокс на каждую
+ *       планету (#planets-opts, из PLANETS); блок виден при включённых планетах;
+ *       названия обновляются при смене языка (applyLang)
  *
  * Изменения 6.1.0:
  *   - loadZodiac() — заодно грузит ZODIAC_STARS_URL (звёзды и фигуры);
@@ -320,8 +325,40 @@ function toggleRuler(active) {
    МУЛЬТИЯЗЫЧНОСТЬ
 ================================================================ */
 
+function planetOptLabel(pl) {
+  return pl.sym + ' ' + (pl.label[state.lang] || pl.label.ru);
+}
+
+/** Чекбоксы отдельных планет (v6.2.0). */
+function buildPlanetOpts() {
+  var box = document.getElementById('planets-opts');
+  if (!box) return;
+  box.textContent = '';
+  PLANETS.forEach(function(pl) {
+    var lab = document.createElement('label');
+    lab.className = 'checkbox-label';
+    var inp = document.createElement('input');
+    inp.type = 'checkbox'; inp.id = 'chk-pl-' + pl.key;
+    inp.checked = state.astro.planetsOn[pl.key] !== false;
+    inp.addEventListener('change', function(e) {
+      state.astro.planetsOn[pl.key] = e.target.checked;
+      updateAstroTimePanel();
+      renderAstro();
+    });
+    var box2 = document.createElement('span'); box2.className = 'checkbox-custom';
+    var txt  = document.createElement('span'); txt.id = 'lbl-pl-' + pl.key;
+    txt.textContent = planetOptLabel(pl);
+    lab.appendChild(inp); lab.appendChild(box2); lab.appendChild(txt);
+    box.appendChild(lab);
+  });
+}
+
 function applyLang() {
   var t = LANG[state.lang];
+  PLANETS.forEach(function(pl) {
+    var el = document.getElementById('lbl-pl-' + pl.key);
+    if (el) el.textContent = planetOptLabel(pl);
+  });
   document.documentElement.lang = state.lang;
   document.querySelectorAll('[data-i18n]').forEach(function(el) {
     var key = el.dataset.i18n;
@@ -715,10 +752,15 @@ async function init() {
     if (!el) return;
     el.addEventListener('change', function(e) {
       state.astro[pair[1]] = e.target.checked;
+      if (pair[1] === 'showPlanets') {          // v6.2.0: список планет виден при включённых
+        var po = document.getElementById('planets-opts');
+        if (po) po.style.display = e.target.checked ? 'block' : 'none';
+      }
       updateAstroTimePanel();
       renderAstro();
     });
   });
+  buildPlanetOpts();
 
   /* Млечный Путь — данные грузятся при первом включении (v5.9.0).
      Слушатель стоит после общего, поэтому флаг уже выставлен. */

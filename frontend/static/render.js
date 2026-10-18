@@ -1,7 +1,10 @@
 /**
  * Файл    : frontend/static/render.js
- * Версия  : 6.1.0
+ * Версия  : 6.2.0
  * Модуль  : Рендеринг SVG-карты
+ *
+ * Изменения 6.2.0:
+ *   - маркеры и хвосты планет рисуются только для включённых (planetOn)
  *
  * Изменения 6.1.0:
  *   - renderZodiac(): линии фигур созвездий (в map-content, non-scaling-stroke,
@@ -918,6 +921,7 @@ function renderPlanetTrails() {
   if (!t.enabled || !state.astro.showPlanets) return;
 
   PLANETS.forEach(function(pl) {
+    if (!planetOn(pl.key)) return;
     var h = t.history[pl.key];
     if (!h || h.length < 2) return;
     renderTrailPath('layer-trail-planets', h, pl.color, TRAIL_BANDS.planets, 0.60);
@@ -1200,6 +1204,7 @@ function renderAstro() {
     var layer = state.svg.select('#layer-planets');
     var tr    = d3.zoomTransform(state.svg.node());
     PLANETS.forEach(function(pl) {
+      if (!planetOn(pl.key)) return;
       var pp = bodySubpoint(pl.key, date);
       if (!pp) return;
       var proj = state.projection([pp.lon, pp.lat]);
