@@ -1,7 +1,26 @@
 /**
  * Файл    : frontend/static/state.js
- * Версия  : 5.9.0
+ * Версия  : 6.1.0
  * Модуль  : Глобальное состояние приложения
+ *
+ * Изменения 6.1.0:
+ *   - state.astro.zodiacStars — показывать звёзды и фигуры созвездий (default true)
+ *   - state.zodiac.stars — данные из ZODIAC_STARS_URL (null, пока не загружены
+ *       или если файла нет)
+ *
+ * Изменения 6.0.0:
+ *   - state.showEquator / showTropics / showEcliptic — линии карты
+ *       (в группе чекбоксов карты, рядом с сеткой)
+ *   - state.astro.showZodiac       — границы созвездий зодиака
+ *   - state.astro.zodiacHighlight  — подсветка созвездия, в котором
+ *       находится показанное тело (Солнце, Луна, планеты), default true
+ *   - state.astro.showOphiuchus    — 13-е созвездие, default false
+ *   - state.zodiac   — { data, loading, key, centers }:
+ *       data    — GeoJSON из ZODIAC_URL (ленивая загрузка)
+ *       centers — { id: [lon, lat] } центроиды для подписей
+ *   - state.ecliptic — { key } кеш-ключ отрисовки эклиптики
+ *   - state.skyFrame — { key, proj, path } общая «небесная» проекция
+ *       (повёрнута на GST), её делят Млечный Путь, зодиак и эклиптика
  *
  * Изменения 5.9.0:
  *   - state.astro.showMilkyWay — флаг видимости Млечного Пути (default false)
@@ -50,6 +69,9 @@ var state = {
   showLabels: false,
   showCities: true,
   showRoutes: false,  // ✈ маршруты самолётов
+  showEquator:  false,  // v6.0.0 — экватор (широта 0°)
+  showTropics:  false,  // v6.0.0 — тропики (широта ±TROPIC_LAT)
+  showEcliptic: false,  // v6.0.0 — эклиптика (зависит от времени)
 
   /* ── Данные ────────────────────────────────────────────── */
   land:    null,      // GeoJSON суши (загружается async)
@@ -61,6 +83,21 @@ var state = {
     loading: false,   // идёт загрузка
     key:     null,    // кеш-ключ последней отрисовки
   },
+
+  /* ── Зодиак (v6.0.0) — грузится лениво при первом включении ── */
+  zodiac: {
+    data:    null,    // GeoJSON границ 13 созвездий (ZODIAC_URL)
+    loading: false,
+    key:     null,    // кеш-ключ последней отрисовки полигонов
+    centers: null,    // { 'Ari': [lon, lat], ... } — центроиды для подписей
+    stars:   null,    // v6.1.0 — { stars:{id:[[ra,dec,mag]]}, lines:{id:[[[ra,dec]]]} }
+  },
+
+  /* ── Эклиптика (v6.0.0) ────────────────────────────────── */
+  ecliptic: { key: null },
+
+  /* ── Небесная проекция (v6.0.0) — кеш, см. skyFrame() в render.js ── */
+  skyFrame: { key: null, proj: null, path: null },
 
   /* ── D3 объекты ────────────────────────────────────────── */
   svg:        null,
@@ -90,6 +127,10 @@ var state = {
     showStars:   false,
     showIss:     false,   // v5.8.0 — маркер субточки МКС
     showMilkyWay: false,  // v5.9.0 — Млечный Путь
+    showZodiac:   false,  // v6.0.0 — границы созвездий зодиака
+    zodiacHighlight: true,   // v6.0.0 — подсвечивать созвездие Солнца/Луны/планет
+    showOphiuchus:   false,  // v6.0.0 — 13-е созвездие (Змееносец)
+    zodiacStars:     true,   // v6.1.0 — звёзды и фигуры созвездий зодиака
 
     date:        new Date(),   // текущий момент времени для расчётов
     playing:     false,

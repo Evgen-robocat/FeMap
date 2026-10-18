@@ -1,7 +1,33 @@
 /**
  * Файл    : frontend/static/config.js
- * Версия  : 5.9.0
+ * Версия  : 6.1.0
  * Модуль  : Константы и статические данные
+ *
+ * Изменения 6.1.0:
+ *   - VERSION → '6.1.0'
+ *   - ZODIAC_STARS_URL, ZODIAC_STARS_STYLE — звёзды (до 5.0 m) и линии
+ *     фигур созвездий зодиака (d3-celestial, BSD-3); грузятся вместе с зодиаком
+ *   - LANG: zodiacStarsChk — чекбокс «звёзды и фигуры созвездий»
+ *   - PLANET_LABEL_STYLE — подписи планет в стиле подписей тропиков
+ *
+ * Изменения 6.0.0:
+ *   - VERSION → '6.0.0'
+ *   - ZODIAC_URL, ZODIAC, ZODIAC_BODIES, ZODIAC_STYLE — созвездия зодиака
+ *     с границами IAU (13 штук, Змееносец — отдельным переключателем)
+ *   - OBLIQUITY, TROPIC_LAT, LINES_STYLE — эклиптика, тропики, экватор
+ *   - LANG: equatorChk, tropicsChk, eclipticChk (чекбоксы),
+ *           equatorName, tropicCancer, tropicCapricorn (подписи линий),
+ *           zodiacOutside (Солнце/Луна/планета вне 13 созвездий)
+ *
+ * Изменения 5.9.2:
+ *   - VERSION → '5.9.2'
+ *   - MILKYWAY_STYLE — фиолетовый #9b4dff, прозрачности
+ *     [0.25, 0.30, 0.38, 0.46, 0.55]: контрастен и на синей воде, и на жёлтой суше
+ *
+ * Изменения 5.9.1:
+ *   - VERSION → '5.9.1'
+ *   - MILKYWAY_STYLE — заливка ярче: цвет #ffffff, прозрачности
+ *     [0.18, 0.22, 0.28, 0.34, 0.42] (было [0.10 … 0.22])
  *
  * Изменения 5.9.0:
  *   - VERSION → '5.9.0'
@@ -34,7 +60,7 @@
 
 'use strict';
 
-var VERSION = window.FEMAP_VERSION || '5.9.0';
+var VERSION = window.FEMAP_VERSION || '6.1.0';
 
 /* ═══════════════════════════════════════════════════════════════
    ЦВЕТА
@@ -198,6 +224,10 @@ var LANG = {
     gridChk:'Сетка 30°', labelsChk:'Подписи координат',
     citiesChk:'🏙 Города и метки', rulerChk:'📏 Линейка расстояний',
     routesChk:'✈ Маршруты рейсов',
+    equatorChk:'Экватор', tropicsChk:'Тропики', eclipticChk:'Эклиптика',   // v6.0.0
+    equatorName:'Экватор', tropicCancer:'Тропик Рака', tropicCapricorn:'Тропик Козерога',
+    zodiacOutside:'вне зодиака',
+    zodiacStarsChk:'звёзды и фигуры созвездий',
     pointsTitle:'Управление точками',
     pointsName:'Название города или объекта',
     pointsLat:'Широта', pointsLon:'Долгота',
@@ -230,6 +260,10 @@ var LANG = {
     gridChk:'Grid 30°', labelsChk:'Coordinate Labels',
     citiesChk:'🏙 Cities & Labels', rulerChk:'📏 Distance Ruler',
     routesChk:'✈ Flight Routes',
+    equatorChk:'Equator', tropicsChk:'Tropics', eclipticChk:'Ecliptic',   // v6.0.0
+    equatorName:'Equator', tropicCancer:'Tropic of Cancer', tropicCapricorn:'Tropic of Capricorn',
+    zodiacOutside:'outside zodiac',
+    zodiacStarsChk:'stars and constellation figures',
     pointsTitle:'Manage Points', pointsName:'City or object name',
     pointsLat:'Latitude', pointsLon:'Longitude',
     addBtn:'+ Add to Map', activePoints:'Active Points',
@@ -261,6 +295,10 @@ var LANG = {
     gridChk:'Gitter 30°', labelsChk:'Koordinatenbeschriftung',
     citiesChk:'🏙 Städte & Labels', rulerChk:'📏 Entfernungslineal',
     routesChk:'✈ Flugrouten',
+    equatorChk:'Äquator', tropicsChk:'Wendekreise', eclipticChk:'Ekliptik',   // v6.0.0
+    equatorName:'Äquator', tropicCancer:'Wendekreis des Krebses', tropicCapricorn:'Wendekreis des Steinbocks',
+    zodiacOutside:'außerhalb Tierkreis',
+    zodiacStarsChk:'Sterne und Sternbildfiguren',
     pointsTitle:'Punkte verwalten', pointsName:'Stadt- oder Objektname',
     pointsLat:'Breitengrad', pointsLon:'Längengrad',
     addBtn:'+ Zur Karte hinzufügen', activePoints:'Aktive Punkte',
@@ -344,8 +382,106 @@ var MILKYWAY_URL = '/data/milkyway.json';
    Контуры вложены друг в друга, прозрачности складываются —
    получается градиент от краёв к ядру. */
 var MILKYWAY_STYLE = {
-  color:   '#e6eeff',
-  opacity: [0.10, 0.12, 0.15, 0.18, 0.22],
+  color:   '#9b4dff',
+  opacity: [0.25, 0.30, 0.38, 0.46, 0.55],
+};
+
+/* ── Зодиак, эклиптика, тропики, экватор (v6.0.0) ───────────────
+   ZODIAC_URL — границы IAU 13 созвездий вдоль эклиптики
+   (d3-celestial, BSD-3, эпоха J2000). Формат: FeatureCollection из
+   Polygon, id = трёхбуквенное обозначение ('Ari', 'Tau', …).
+   При подготовке файла:
+     · у Весов, Стрельца и Козерога кольца были с обратной обмоткой
+       (D3 принял бы их за «всё небо, кроме созвездия») — развёрнуты;
+     · рёбра уплотнены до шага 1° по RA/Dec: границы идут по линиям
+       RA и Dec, а D3 соединяет вершины дугами большого круга, что для
+       длинных рёбер (до 26°) дало бы заметную ошибку.
+   Загружается лениво при первом включении чекбокса (~35 КБ).
+══════════════════════════════════════════════════════════════════ */
+var ZODIAC_URL = '/data/zodiac.json';
+
+/* Звёзды (до 5.0 m) в границах 13 созвездий и линии их фигур
+   (constellations.lines, d3-celestial). Формат:
+   { stars: { Ari: [[ra, dec, mag], …], … }, lines: { Ari: [[[ra,dec],…], …], … } }
+   (~11 КБ). Если файла нет — зодиак работает без звёзд. */
+var ZODIAC_STARS_URL = '/data/zodiac-stars.json';
+
+/* Размер звезды (диаметр, px) по звёздной величине: первое подходящее
+   условие mag < max. Линии фигур — тонкие, подсвеченного созвездия — ярче. */
+var ZODIAC_STARS_STYLE = {
+  sizes:     [ { max: 1.5, d: 6 }, { max: 2.5, d: 4.6 }, { max: 3.5, d: 3.5 },
+               { max: 4.5, d: 2.6 }, { max: 99, d: 2 } ],
+  color:     '#ffffff',
+  halo:      'rgba(0,0,0,0.45)',  // тёмная подложка — читается на жёлтой суше
+  haloExtra: 1.8,                 // на сколько px подложка шире звезды
+  line:      '#d9e8ff',
+  lineOpacity:   0.55,
+  lineWidth:     0.9,
+  hlLineOpacity: 0.95,
+  hlLineWidth:   1.5,
+};
+
+/* Подписи планет — как названия тропиков: моноширинный 10px,
+   цвет планеты, тёмная обводка (paint-order: stroke). */
+var PLANET_LABEL_STYLE = {
+  size:   '10px',
+  family: 'monospace',
+  halo:   'rgba(0,0,0,0.65)',
+  haloW:  2.5,
+};
+
+/* Порядок — по эклиптике. extra: true — 13-е созвездие, которое Солнце
+   тоже проходит, но которого нет в классическом зодиаке; показывается
+   отдельным переключателем (chk-ophiuchus). */
+var ZODIAC = [
+  { id:'Ari', ru:'Овен',       en:'Aries',       de:'Widder'          },
+  { id:'Tau', ru:'Телец',      en:'Taurus',      de:'Stier'           },
+  { id:'Gem', ru:'Близнецы',   en:'Gemini',      de:'Zwillinge'       },
+  { id:'Cnc', ru:'Рак',        en:'Cancer',      de:'Krebs'           },
+  { id:'Leo', ru:'Лев',        en:'Leo',         de:'Löwe'            },
+  { id:'Vir', ru:'Дева',       en:'Virgo',       de:'Jungfrau'        },
+  { id:'Lib', ru:'Весы',       en:'Libra',       de:'Waage'           },
+  { id:'Sco', ru:'Скорпион',   en:'Scorpius',    de:'Skorpion'        },
+  { id:'Oph', ru:'Змееносец',  en:'Ophiuchus',   de:'Schlangenträger', extra:true },
+  { id:'Sgr', ru:'Стрелец',    en:'Sagittarius', de:'Schütze'         },
+  { id:'Cap', ru:'Козерог',    en:'Capricornus', de:'Steinbock'       },
+  { id:'Aqr', ru:'Водолей',    en:'Aquarius',    de:'Wassermann'      },
+  { id:'Psc', ru:'Рыбы',       en:'Pisces',      de:'Fische'          },
+];
+
+/* Тела, для которых подсвечивается созвездие. Планеты берутся из PLANETS.
+   Приоритет цвета заливки, если в одном созвездии несколько тел:
+   Солнце → Луна → планеты по порядку PLANETS. */
+var ZODIAC_BODIES = {
+  Sun:  { sym:'☀', color:'#ffd23f', label:{ ru:'Солнце', en:'Sun',  de:'Sonne' } },
+  Moon: { sym:'☾', color:'#9fd0ff', label:{ ru:'Луна',   en:'Moon', de:'Mond'  } },
+};
+
+/* Стиль зодиака. Линии рисуются с non-scaling-stroke — толщина в
+   пикселях экрана не меняется при зуме. Подсветка: цветной ореол
+   тела + белая обводка + заливка цветом тела. */
+var ZODIAC_STYLE = {
+  border:         '#efe6ff',  // границы всех показанных созвездий
+  borderOpacity:  0.80,
+  borderWidth:    1.1,
+  label:          '#f4eeff',  // названия созвездий
+  hlFillOpacity:  0.30,       // заливка подсвеченного созвездия
+  hlHaloOpacity:  0.60,       // ореол вокруг границы
+  hlHaloWidth:    5,
+  hlStroke:       '#ffffff',  // белая обводка границы
+  hlWidth:        1.8,
+};
+
+/* Наклон эклиптики к экватору (J2000), градусы. По нему строится
+   эклиптика и тропики: тропик — параллель на широте ±OBLIQUITY. */
+var OBLIQUITY  = 23.4393;
+var TROPIC_LAT = OBLIQUITY;
+
+/* Стиль линий. Все три лежат на карте через non-scaling-stroke. */
+var LINES_STYLE = {
+  equator:  { color:'#ff4d4d', width:1.5, dash:''    },   // красный
+  tropics:  { color:'#ff9f1a', width:1.3, dash:'7,4' },   // оранжевый пунктир
+  ecliptic: { color:'#ffffff', width:1.6, dash:''    },   // белая
 };
 
 /* Шаги анимации в миллисекундах */

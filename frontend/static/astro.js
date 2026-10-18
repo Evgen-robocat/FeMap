@@ -1,7 +1,19 @@
 /**
  * Файл    : frontend/static/astro.js
- * Версия  : 5.9.0
+ * Версия  : 6.0.0
  * Модуль  : Астрономические вычисления и управление временем
+ *
+ * Изменения 6.0.0:
+ *   - bodyRaDecJ2000(key, date) — геоцентрические RA/Dec тела в эпохе J2000
+ *       (astronomy-engine; для Солнца есть запасная формула без библиотеки)
+ *   - zodiacFind(ra, dec)       — id созвездия зодиака, содержащего точку
+ *   - zodiacShownBodies()       — тела, показанные на карте (Солнце, Луна, планеты)
+ *   - zodiacHighlights()        — для каждого показанного тела: в каком
+ *       созвездии оно находится (поле cid, null — вне 13 созвездий);
+ *       результат кешируется по времени и набору тел (зум не пересчитывает)
+ *   - zodiacName(id, lang)      — название созвездия
+ *   - eclipticLine()            — GeoJSON эклиптики в RA/Dec (J2000)
+ *   - astroAnyOn()              — добавлены showZodiac и showEcliptic
  *
  * Изменения 5.9.0:
  *   - gstHours(date)  — звёздное время по Гринвичу в часах (общий хелпер:
@@ -278,6 +290,158 @@ function nightGeoJSON(sp) {
   var aLat = -sp.lat;
   var aLon = sp.lon >= 0 ? sp.lon - 180 : sp.lon + 180;
   return d3.geoCircle().center([aLon, aLat]).radius(90).precision(1.5)();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ЗОДИАК И ЭКЛИПТИКА (v6.0.0)
+═══════════════════════════════════════════════════════════════ */
+
+/**
+ * Запасная формула RA/Dec Солнца (без astronomy-engine), эпоха J2000.
+ * Формула даёт долготу «текущей даты» — вычитаем прецессию
+ * (50.29″/год ≈ 0.013969°/год), иначе границы созвездий, заданные в
+ * J2000, сдвинулись бы на ~0.36°.
+ */
+function sunRaDecFallback(date) {
+  var JD   = date.getTime() / 86400000 + 2440587.5;
+  var n    = JD - 2451545.0;
+  var L    = ((280.460 + 0.9856474 * n) % 360 + 360) % 360;
+  var g    = ((357.528 + 0.9856003 * n) % 360 + 360) % 360;
+  var gR   = g * Math.PI / 180;
+  var lam  = L + 1.915 * Math.sin(gR) + 0.020 * Math.sin(2 * gR);
+  lam -= 0.013969 * (n / 365.25);
+  var lamR = lam * Math.PI / 180;
+  var eps  = OBLIQUITY * Math.PI / 180;
+  var ra   = Math.atan2(Math.cos(eps) * Math.sin(lamR), Math.cos(lamR)) * 180 / Math.PI;
+  var dec  = Math.asin(Math.sin(eps) * Math.sin(lamR)) * 180 / Math.PI;
+  return { ra: ((ra % 360) + 360) % 360, dec: dec };
+}
+
+/**
+ * Геоцентрические экваториальные координаты тела в эпохе J2000
+ * (в той же эпохе заданы границы созвездий в zodiac.json).
+ * В отличие от bodySubpoint() здесь НЕТ топоцентрической поправки
+ * (иначе Луна сдвинулась бы до ~1°) и нет перехода к экватору даты.
+ *
+ * @param {string} bodyKey — 'Sun' | 'Moon' | 'Mercury' | …
+ * @param {Date}   date
+ * @returns {{ ra: number, dec: number } | null} — градусы, ra 0..360
+ */
+function bodyRaDecJ2000(bodyKey, date) {
+  if (astroOk() &&
+      typeof Astronomy.GeoVector === 'function' &&
+      typeof Astronomy.EquatorFromVector === 'function') {
+    try {
+      var body = Astronomy.Body[bodyKey];
+      if (body !== undefined) {
+        var eq = Astronomy.EquatorFromVector(Astronomy.GeoVector(body, date, true));
+        return { ra: eq.ra * 15, dec: eq.dec };
+      }
+    } catch(e) {
+      console.error('[astro] bodyRaDecJ2000 "' + bodyKey + '" ошибка:', e.message || e);
+    }
+  }
+  if (bodyKey === 'Sun') return sunRaDecFallback(date);
+  return null;
+}
+
+/**
+ * Ищет созвездие зодиака (из 13), содержащее точку неба.
+ * @param {number} raDeg — 0..360
+ * @param {number} dec
+ * @returns {string|null} — id ('Vir', …) или null, если вне 13 созвездий
+ */
+function zodiacFind(raDeg, dec) {
+  var z = state.zodiac.data;
+  if (!z || !z.features) return null;
+  var pt = [raDeg > 180 ? raDeg - 360 : raDeg, dec];
+  for (var i = 0; i < z.features.length; i++) {
+    if (d3.geoContains(z.features[i], pt)) return z.features[i].id;
+  }
+  return null;
+}
+
+/**
+ * Тела, которые сейчас показаны на карте, в порядке приоритета цвета:
+ * Солнце → Луна → планеты (порядок PLANETS).
+ * @returns {Array<{ key, sym, color, label }>}
+ */
+function zodiacShownBodies() {
+  var out = [];
+  if (state.astro.showSun) {
+    out.push({ key:'Sun',  sym:ZODIAC_BODIES.Sun.sym,  color:ZODIAC_BODIES.Sun.color,  label:ZODIAC_BODIES.Sun.label });
+  }
+  if (state.astro.showMoon) {
+    out.push({ key:'Moon', sym:ZODIAC_BODIES.Moon.sym, color:ZODIAC_BODIES.Moon.color, label:ZODIAC_BODIES.Moon.label });
+  }
+  if (state.astro.showPlanets && astroOk()) {
+    PLANETS.forEach(function(pl) {
+      out.push({ key:pl.key, sym:pl.sym, color:pl.color, label:pl.label });
+    });
+  }
+  return out;
+}
+
+/**
+ * Для каждого показанного тела определяет созвездие, в котором оно
+ * находится. Пусто, если зодиак или подсветка выключены, либо данные
+ * ещё не загружены.
+ * @returns {Array<{ key, sym, color, label, cid }>} cid — id созвездия или null
+ */
+var _hlCache = { key: null, val: [] };
+
+function zodiacHighlights() {
+  var a = state.astro;
+  if (!a.showZodiac || !a.zodiacHighlight || !state.zodiac.data) return [];
+
+  /* Кеш: renderAstro() вызывается и при каждом событии зума, а положения
+     тел за это время не меняются — пересчитывать их незачем. */
+  var key = [a.date.getTime(), a.showSun ? 1 : 0, a.showMoon ? 1 : 0,
+             a.showPlanets ? 1 : 0, astroOk() ? 1 : 0].join('|');
+  if (_hlCache.key === key) return _hlCache.val;
+
+  var val = zodiacShownBodies().map(function(b) {
+    var rd = bodyRaDecJ2000(b.key, a.date);
+    b.cid = rd ? zodiacFind(rd.ra, rd.dec) : null;
+    return b;
+  });
+  _hlCache = { key: key, val: val };
+  return val;
+}
+
+/** Название созвездия зодиака на языке интерфейса. */
+function zodiacName(id, lang) {
+  for (var i = 0; i < ZODIAC.length; i++) {
+    if (ZODIAC[i].id === id) return ZODIAC[i][lang] || ZODIAC[i].ru;
+  }
+  return id;
+}
+
+var _eclipticLine = null;
+
+/**
+ * Эклиптика как GeoJSON LineString в RA/Dec (J2000), шаг 1° по
+ * эклиптической долготе. Точка (λ, β=0):
+ *   x = cos λ,  y = sin λ · cos ε,  z = sin λ · sin ε
+ *   RA = atan2(y, x),  Dec = asin(z).
+ * Эклиптика — большой круг, дуги D3 между соседними точками точны.
+ * Считается один раз, дальше кешируется.
+ */
+function eclipticLine() {
+  if (_eclipticLine) return _eclipticLine;
+  var eps = OBLIQUITY * Math.PI / 180;
+  var coords = [];
+  for (var lam = 0; lam <= 360; lam++) {
+    var l = lam * Math.PI / 180;
+    var x = Math.cos(l);
+    var y = Math.sin(l) * Math.cos(eps);
+    var z = Math.sin(l) * Math.sin(eps);
+    var ra  = Math.atan2(y, x) * 180 / Math.PI;   // -180..180
+    var dec = Math.asin(z) * 180 / Math.PI;
+    coords.push([ra, dec]);
+  }
+  _eclipticLine = { type: 'LineString', coordinates: coords };
+  return _eclipticLine;
 }
 
 /**
@@ -625,7 +789,8 @@ function astroAnyOn() {
   return state.astro.showSun    || state.astro.showNight  ||
          state.astro.showMoon   || state.astro.showPlanets ||
          state.astro.showStars  || state.astro.showIss  ||  // v5.8.0
-         state.astro.showMilkyWay;                          // v5.9.0
+         state.astro.showMilkyWay ||                        // v5.9.0
+         state.astro.showZodiac   || state.showEcliptic;    // v6.0.0
 }
 
 /**

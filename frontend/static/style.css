@@ -1,7 +1,10 @@
 /*
   Файл    : public/static/style.css
-  Версия  : 4.4.1
-  Дата    : 2026-04-20
+  Версия  : 4.5.0
+  Дата    : 2026-10-18
+  Изменения 4.5.0 (FeMap 6.1.0): щипок вне карты не масштабирует страницу —
+    touch-action: pan-x pan-y на html/body, text-size-adjust: 100%,
+    overscroll-behavior: none; карта (#map) обрабатывает жесты сама (d3.zoom)
   Автор   : Евгений / Claude
 */
 
@@ -23,7 +26,13 @@ body, html {
   color: var(--text-color);
   overflow: hidden;
   display: flex;
+  touch-action: pan-x pan-y;      /* без щипка-зума страницы */
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
+
+#map, #map svg { touch-action: none; }  /* жесты карты — d3.zoom */
 
 #controls {
   flex: 0 0 var(--panel-width);

@@ -1,7 +1,32 @@
 /**
  * Файл    : frontend/static/render.js
- * Версия  : 5.9.0
+ * Версия  : 6.1.0
  * Модуль  : Рендеринг SVG-карты
+ *
+ * Изменения 6.1.0:
+ *   - renderZodiac(): линии фигур созвездий (в map-content, non-scaling-stroke,
+ *     у подсвеченного созвездия ярче) и звёзды (оверлей zlabels, пересчёт при
+ *     зуме; один path на класс величины, размер не зависит от зума);
+ *     включается state.astro.zodiacStars; данные — state.zodiac.stars
+ *   - renderAstro(): подписи планет в стиле подписей тропиков
+ *     (PLANET_LABEL_STYLE: 10px monospace, цвет планеты, тёмная обводка)
+ *
+ * Изменения 6.0.0:
+ *   - skyFrame() — общая «небесная» проекция (повёрнута на GST), кешируется
+ *     по ключу; её делят Млечный Путь, зодиак и эклиптика
+ *   - renderMilkyWay() переведён на skyFrame() (поведение прежнее)
+ *   - renderZodiac()  — границы 13 созвездий, подсветка созвездия каждого
+ *     показанного тела (Солнце, Луна, планеты): заливка цветом тела, цветной
+ *     ореол и белая обводка границы; подписи названий в оверлее zlabels;
+ *     строка со списком «тело — созвездие» в #zodiac-info
+ *   - renderEcliptic() — эклиптика (зависит от времени, как и все небесные слои)
+ *   - renderLines()   — экватор и тропики (географические параллели)
+ *   - renderLabels()  — названия экватора и тропиков (независимо от чекбокса
+ *     «Подписи координат»)
+ *   - createSVG(): слои zodiac, ecliptic, lines (внутри map-content) и
+ *     zlabels (оверлей); линии рисуются с non-scaling-stroke
+ *   - render() — вызывает renderLines(); renderAstro() — renderZodiac(),
+ *     renderEcliptic()
  *
  * Изменения 5.9.0:
  *   - createSVG(): слой 'milkyway' внутри map-content (между night и routes),
@@ -41,7 +66,11 @@
  *   - renderCities()        — города / точки
  *   - renderRoutes()        — маршруты
  *   - renderNight()         — ночная тень
+ *   - skyFrame()            — небесная проекция, кеш (v6.0.0)
  *   - renderMilkyWay()      — Млечный Путь (v5.9.0)
+ *   - renderZodiac()        — зодиак: границы, подсветка, подписи (v6.0.0)
+ *   - renderEcliptic()      — эклиптика (v6.0.0)
+ *   - renderLines()         — экватор и тропики (v6.0.0)
  *   - renderTrails()        — диспетчер хвостов
  *   - renderTrailPolyline() — хвост через polyline
  *   - renderTrailPath()     — хвост через geoPath (дуги)
@@ -80,8 +109,11 @@ function createSVG() {
 
   // Слои внутри map-content — масштабируются d3.zoom трансформом.
   var mc = state.svg.append('g').attr('id', 'map-content');
-  // milkyway (v5.9.0): над ночной тенью, под маршрутами и рамкой диска
-  ['water','land','borders','grid','night','milkyway','routes','border'].forEach(function(id) {
+  // milkyway (v5.9.0): над ночной тенью, под маршрутами и рамкой диска.
+  // zodiac, ecliptic, lines (v6.0.0): над Млечным Путём; lines — экватор
+  // и тропики, поверх остальных слоёв неба.
+  ['water','land','borders','grid','night','milkyway','zodiac','ecliptic','lines',
+   'routes','border'].forEach(function(id) {
     mc.append('g').attr('id', 'layer-' + id);
   });
 
@@ -91,7 +123,7 @@ function createSVG() {
   // trail-iss добавлен между trail-planets и sun (v5.8.0)
   // layer-iss добавлен между layer-planets и layer-stars (v5.8.0)
   [
-    'labels','cities','ruler',
+    'labels','zlabels','cities','ruler',
     'trail-sun','trail-moon','trail-stars','trail-planets','trail-iss',
     'sun','moon','planets','iss','stars'
   ].forEach(function(id) {
@@ -201,6 +233,7 @@ function render() {
     .attr('d', state.path).attr('fill', 'none')
     .attr('stroke', COLORS.diskBorder).attr('stroke-width', 1.5);
 
+  renderLines();   // v6.0.0
   renderLabels();
   renderCities();
   renderRoutes();
@@ -209,21 +242,49 @@ function render() {
 }
 
 /**
- * Подписи широт (0°, ±30°, ±60°).
+ * Подписи широт (0°, ±30°, ±60°) и (v6.0.0) названия экватора и тропиков.
+ * Названия линий показываются, пока включена сама линия, и не зависят
+ * от чекбокса «Подписи координат».
  */
 function renderLabels() {
   var layer = state.svg.select('#layer-labels');
   layer.selectAll('*').remove();
-  if (!state.showLabels) return;
   var tr = d3.zoomTransform(state.svg.node());
-  [0, 30, 60, -30, -60].forEach(function(lat) {
-    var proj = state.projection([state.lon, lat]);
+
+  if (state.showLabels) {
+    [0, 30, 60, -30, -60].forEach(function(lat) {
+      var proj = state.projection([state.lon, lat]);
+      if (!proj) return;
+      var pt = tr.apply(proj);
+      layer.append('text')
+        .attr('x', pt[0] + 4).attr('y', pt[1]).attr('dy', '0.35em')
+        .attr('fill', '#a0d8ef').attr('font-size', '10px')
+        .attr('font-family', 'monospace').text(lat + '°');
+    });
+  }
+
+  /* v6.0.0: названия экватора и тропиков — слева от линии на меридиане центра */
+  var t = LANG[state.lang];
+  var names = [];
+  if (state.showEquator) {
+    names.push({ lat: 0, text: t.equatorName, color: LINES_STYLE.equator.color });
+  }
+  if (state.showTropics) {
+    names.push({ lat:  TROPIC_LAT, text: t.tropicCancer,    color: LINES_STYLE.tropics.color });
+    names.push({ lat: -TROPIC_LAT, text: t.tropicCapricorn, color: LINES_STYLE.tropics.color });
+  }
+  names.forEach(function(n) {
+    var proj = state.projection([state.lon, n.lat]);
     if (!proj) return;
     var pt = tr.apply(proj);
     layer.append('text')
-      .attr('x', pt[0] + 4).attr('y', pt[1]).attr('dy', '0.35em')
-      .attr('fill', '#a0d8ef').attr('font-size', '10px')
-      .attr('font-family', 'monospace').text(lat + '°');
+      .attr('x', pt[0] - 4).attr('y', pt[1]).attr('dy', '-0.4em')
+      .attr('text-anchor', 'end')
+      .attr('fill', n.color).attr('font-size', '10px').attr('font-family', 'monospace')
+      .attr('stroke', 'rgba(0,0,0,0.65)').attr('stroke-width', 2.5)
+      .attr('paint-order', 'stroke')
+      .attr('pointer-events', 'none')
+      .text(n.text);
   });
 }
 
@@ -357,22 +418,100 @@ function renderNight() {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   МЛЕЧНЫЙ ПУТЬ (v5.9.0)
+   ЭКВАТОР И ТРОПИКИ (v6.0.0) — географические параллели
+═══════════════════════════════════════════════════════════════ */
+
+/** Параллель на широте lat как LineString с шагом 1° по долготе. */
+function parallelLine(lat) {
+  var c = [];
+  for (var lon = -180; lon <= 180; lon += 1) c.push([lon, lat]);
+  return { type: 'LineString', coordinates: c };
+}
+
+/**
+ * Общий стиль линий слоёв v6.0.0. non-scaling-stroke — толщина в пикселях
+ * экрана не меняется при зуме (слои лежат внутри map-content).
+ */
+function styleLine(sel, st) {
+  return sel
+    .attr('fill', 'none')
+    .attr('stroke', st.color)
+    .attr('stroke-width', st.width)
+    .attr('stroke-dasharray', st.dash || null)
+    .attr('stroke-linecap', 'round')
+    .style('vector-effect', 'non-scaling-stroke')
+    .attr('pointer-events', 'none');
+}
+
+/**
+ * Экватор (широта 0°) и тропики (широта ±TROPIC_LAT).
+ * Параллели привязаны к Земле и от времени не зависят — это же и
+ * небесный экватор / тропики склонения: точка неба с Dec = ±23.44°
+ * лежит над параллелью с той же широтой.
+ */
+function renderLines() {
+  var layer = state.svg.select('#layer-lines');
+  layer.selectAll('*').remove();
+  if (state.showEquator) {
+    styleLine(layer.append('path').datum(parallelLine(0)).attr('d', state.path),
+      LINES_STYLE.equator);
+  }
+  if (state.showTropics) {
+    [TROPIC_LAT, -TROPIC_LAT].forEach(function(lat) {
+      styleLine(layer.append('path').datum(parallelLine(lat)).attr('d', state.path),
+        LINES_STYLE.tropics);
+    });
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   НЕБЕСНЫЕ СЛОИ: Млечный Путь, зодиак, эклиптика
 ═══════════════════════════════════════════════════════════════ */
 
 /**
- * Рисует Млечный Путь как набор вложенных полупрозрачных полигонов.
+ * Небесная проекция (v6.0.0, общая для Млечного Пути, зодиака и эклиптики).
  *
  * Точка неба (RA, Dec) лежит над точкой Земли lon = RA - GST, lat = Dec,
- * то есть переход «небо → Земля» — это только сдвиг по долготе на -GST.
+ * то есть переход «небо → Земля» — только сдвиг по долготе на -GST.
  * Сдвиг по долготе — вращение вокруг оси полюсов, поэтому его можно
- * свернуть в проекцию: rotate([-state.lon - GST, -state.lat]) вместо
- * того, чтобы пересчитывать ~30 тыс. вершин на каждом кадре.
- * Смена центра проекции учитывается тем же rotate — отдельной логики нет.
+ * свернуть в проекцию: rotate([-state.lon - GST, -state.lat]). Геометрия
+ * остаётся в градусах RA/Dec и не пересчитывается; смена центра проекции
+ * учитывается тем же rotate — отдельной логики нет.
  *
- * Слой лежит внутри map-content: зум делает SVG-трансформ.
- * Перерисовка пропускается, если не менялись центр, время и размеры
- * проекции (ключ state.milkyway.key) — в первую очередь при зуме и пане.
+ * Проекция пересоздаётся только когда меняется ключ (центр, время,
+ * размеры); иначе возвращается прежняя. Слои сравнивают f.key со своим
+ * ключом и пропускают перерисовку, если ничего не менялось — в первую
+ * очередь при зуме и пане (слои лежат внутри map-content, зум делает
+ * SVG-трансформ).
+ *
+ * @returns {{ key: string, proj: Function, path: Function }}
+ */
+function skyFrame() {
+  var gst   = gstHours(state.astro.date) * 15;   // градусы
+  var scale = state.projection.scale();
+  var tr    = state.projection.translate();
+
+  var key = [
+    state.lon, state.lat, gst.toFixed(4),
+    scale.toFixed(2), tr[0].toFixed(1), tr[1].toFixed(1)
+  ].join('|');
+
+  var f = state.skyFrame;
+  if (f.key !== key) {
+    f.key  = key;
+    f.proj = d3.geoAzimuthalEquidistant()
+      .rotate([-state.lon - gst, -state.lat])
+      .scale(scale)
+      .translate(tr)
+      .clipAngle(179.9);
+    f.path = d3.geoPath(f.proj);
+  }
+  return f;
+}
+
+/**
+ * Млечный Путь: пять вложенных полупрозрачных полигонов-изофот.
+ * Рисуется через skyFrame(); перерисовка — только при смене ключа.
  */
 function renderMilkyWay() {
   var layer = state.svg.select('#layer-milkyway');
@@ -386,34 +525,238 @@ function renderMilkyWay() {
      он сам вызовет renderAstro() */
   if (!mw.data || !mw.data.features) return;
 
-  var gst   = gstHours(state.astro.date) * 15;   // градусы
-  var scale = state.projection.scale();
-  var tr    = state.projection.translate();
-
-  var key = [
-    state.lon, state.lat, gst.toFixed(4),
-    scale.toFixed(2), tr[0].toFixed(1), tr[1].toFixed(1)
-  ].join('|');
-  if (key === mw.key) return;
-  mw.key = key;
-
-  var skyProj = d3.geoAzimuthalEquidistant()
-    .rotate([-state.lon - gst, -state.lat])
-    .scale(scale)
-    .translate(tr)
-    .clipAngle(179.9);
-  var skyPath = d3.geoPath(skyProj);
+  var f = skyFrame();
+  if (mw.key === f.key) return;
+  mw.key = f.key;
 
   var ops = MILKYWAY_STYLE.opacity;
   layer.selectAll('path')
     .data(mw.data.features)
     .join('path')
-    .attr('d', skyPath)
+    .attr('d', f.path)
     .attr('fill', MILKYWAY_STYLE.color)
     .attr('fill-opacity', function(d, i) { return ops[Math.min(i, ops.length - 1)]; })
     .attr('fill-rule', 'evenodd')
     .attr('stroke', 'none')
     .attr('pointer-events', 'none');
+}
+
+/**
+ * Зодиак: границы 13 созвездий (Змееносец — по отдельному флагу),
+ * подсветка созвездия каждого показанного тела, подписи, строка
+ * «тело — созвездие» в #zodiac-info.
+ *
+ * Подсветка: заливка цветом тела (приоритет Солнце → Луна → планеты,
+ * если тел в созвездии несколько), цветной ореол и белая обводка границы.
+ * Полигоны и подсветка перерисовываются при смене ключа (небесная
+ * проекция + набор подсвеченных + флаг Змееносца); подписи лежат в
+ * оверлее вне map-content и пересчитываются каждый раз — это нужно при
+ * зуме и стоит 13 проекций точки.
+ */
+function renderZodiac() {
+  var layer = state.svg.select('#layer-zodiac');
+  var lbls  = state.svg.select('#layer-zlabels');
+  var z     = state.zodiac;
+  var a     = state.astro;
+  var info  = document.getElementById('zodiac-info');
+
+  lbls.selectAll('*').remove();
+
+  if (!a.showZodiac) {
+    if (z.key !== null) { layer.selectAll('*').remove(); z.key = null; }
+    if (info) info.style.display = 'none';
+    return;
+  }
+  if (!z.data || !z.data.features) {          // ещё грузится (main.js → loadZodiac)
+    if (info) info.style.display = 'none';
+    return;
+  }
+
+  var lang = state.lang;
+  var f    = skyFrame();
+
+  /* Какие созвездия показаны: все 13, кроме «extra» (Змееносец) без флага */
+  var extra = {};
+  ZODIAC.forEach(function(e) { if (e.extra) extra[e.id] = true; });
+  var shown = z.data.features.filter(function(ft) {
+    return a.showOphiuchus || !extra[ft.id];
+  });
+  var shownIds = {};
+  shown.forEach(function(ft) { shownIds[ft.id] = ft; });
+
+  /* Подсветка: созвездие → первое тело (по приоритету цвета) */
+  var hl     = zodiacHighlights();            // [{key,sym,color,label,cid}]
+  var hlMap  = {};
+  hl.forEach(function(b) { if (b.cid && !hlMap[b.cid]) hlMap[b.cid] = b; });
+  var hlIds  = Object.keys(hlMap).filter(function(id) { return shownIds[id]; });
+
+  /* ── Полигоны: перерисовка только при смене ключа ── */
+  var zs     = (a.zodiacStars && z.stars) ? z.stars : null;   // v6.1.0
+  var key = [
+    f.key, a.showOphiuchus ? 1 : 0, zs ? 1 : 0,
+    hlIds.map(function(id) { return id + hlMap[id].key; }).join(',')
+  ].join('#');
+
+  if (z.key !== key) {
+    z.key = key;
+    layer.selectAll('*').remove();
+    var S = ZODIAC_STYLE;
+
+    /* 1. заливка подсвеченных */
+    hlIds.forEach(function(id) {
+      layer.append('path').datum(shownIds[id]).attr('d', f.path)
+        .attr('fill', hlMap[id].color).attr('fill-opacity', S.hlFillOpacity)
+        .attr('stroke', 'none').attr('pointer-events', 'none');
+    });
+
+    /* 2. границы всех показанных */
+    shown.forEach(function(ft) {
+      layer.append('path').datum(ft).attr('d', f.path)
+        .attr('fill', 'none')
+        .attr('stroke', S.border).attr('stroke-opacity', S.borderOpacity)
+        .attr('stroke-width', S.borderWidth)
+        .attr('stroke-linejoin', 'round')
+        .style('vector-effect', 'non-scaling-stroke')
+        .attr('pointer-events', 'none');
+    });
+
+    /* 2б. линии фигур созвездий (v6.1.0) */
+    if (zs) {
+      var SS = ZODIAC_STARS_STYLE;
+      shown.forEach(function(ft) {
+        var ls = zs.lines[ft.id];
+        if (!ls || !ls.length) return;
+        var isH = !!hlMap[ft.id];
+        layer.append('path')
+          .datum({ type: 'MultiLineString', coordinates: ls }).attr('d', f.path)
+          .attr('fill', 'none').attr('stroke', isH ? '#ffffff' : SS.line)
+          .attr('stroke-opacity', isH ? SS.hlLineOpacity : SS.lineOpacity)
+          .attr('stroke-width', isH ? SS.hlLineWidth : SS.lineWidth)
+          .attr('stroke-linecap', 'round').attr('stroke-linejoin', 'round')
+          .style('vector-effect', 'non-scaling-stroke')
+          .attr('pointer-events', 'none');
+      });
+    }
+
+    /* 3. подсвеченные: цветной ореол + белая обводка */
+    hlIds.forEach(function(id) {
+      var d = f.path(shownIds[id]);
+      layer.append('path').attr('d', d)
+        .attr('fill', 'none')
+        .attr('stroke', hlMap[id].color).attr('stroke-opacity', S.hlHaloOpacity)
+        .attr('stroke-width', S.hlHaloWidth).attr('stroke-linejoin', 'round')
+        .style('vector-effect', 'non-scaling-stroke')
+        .attr('pointer-events', 'none');
+      layer.append('path').attr('d', d)
+        .attr('fill', 'none')
+        .attr('stroke', S.hlStroke).attr('stroke-width', S.hlWidth)
+        .attr('stroke-linejoin', 'round')
+        .style('vector-effect', 'non-scaling-stroke')
+        .attr('pointer-events', 'none');
+    });
+  }
+
+  /* ── Звёзды (оверлей: размер не зависит от зума, позиции пересчитываются) ── */
+  var tr = d3.zoomTransform(state.svg.node());
+  if (zs) {
+    var SZ = ZODIAC_STARS_STYLE.sizes;
+    var cls = SZ.map(function() { return []; });       // d-путь на класс величины
+    shown.forEach(function(ft) {
+      (zs.stars[ft.id] || []).forEach(function(s) {
+        var p = f.proj([s[0], s[1]]);
+        if (!p) return;
+        var q = tr.apply(p);
+        for (var i = 0; i < SZ.length; i++) {
+          if (s[2] < SZ[i].max) {
+            cls[i].push('M' + q[0].toFixed(1) + ',' + q[1].toFixed(1) + 'h0');
+            break;
+          }
+        }
+      });
+    });
+    [true, false].forEach(function(isHalo) {           // сначала подложка, потом звёзды
+      cls.forEach(function(arr, i) {
+        if (!arr.length) return;
+        lbls.append('path').attr('d', arr.join(''))
+          .attr('fill', 'none')
+          .attr('stroke', isHalo ? ZODIAC_STARS_STYLE.halo : ZODIAC_STARS_STYLE.color)
+          .attr('stroke-width', SZ[i].d + (isHalo ? ZODIAC_STARS_STYLE.haloExtra : 0))
+          .attr('stroke-linecap', 'round')
+          .attr('pointer-events', 'none');
+      });
+    });
+  }
+
+  /* ── Подписи (оверлей, с учётом зума) ── */
+  shown.forEach(function(ft) {
+    var c = z.centers && z.centers[ft.id];
+    if (!c) return;
+    var p = f.proj(c);
+    if (!p) return;
+    var q    = tr.apply(p);
+    var isHl = !!hlMap[ft.id];
+    lbls.append('text')
+      .attr('x', q[0]).attr('y', q[1]).attr('dy', '0.35em')
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'sans-serif')
+      .attr('font-size', isHl ? '12px' : '10px')
+      .attr('font-weight', isHl ? 'bold' : 'normal')
+      .attr('fill', isHl ? '#ffffff' : ZODIAC_STYLE.label)
+      .attr('stroke', 'rgba(10,0,30,0.75)').attr('stroke-width', 2.5)
+      .attr('paint-order', 'stroke')
+      .attr('pointer-events', 'none')
+      .text(zodiacName(ft.id, lang));
+  });
+
+  /* ── Строка «тело — созвездие» ── */
+  if (info) {
+    if (!hl.length) {
+      info.style.display = 'none';
+    } else {
+      var t   = LANG[lang];
+      var sig = lang + '|' + hl.map(function(b) { return b.key + ':' + (b.cid || '-'); }).join('|');
+      info.style.display = 'block';
+      if (info.dataset.sig !== sig) {            // DOM трогаем, только если текст изменился
+        info.dataset.sig = sig;
+        info.textContent = '';
+        hl.forEach(function(b) {
+          var span = document.createElement('span');
+          span.style.cssText = 'display:inline-block;margin:0 5px;white-space:nowrap;';
+          var sym = document.createElement('span');
+          sym.style.color = b.color;
+          sym.textContent = b.sym + ' ';
+          var nm = document.createElement('span');
+          nm.textContent = b.cid ? zodiacName(b.cid, lang) : t.zodiacOutside;
+          if (!b.cid) nm.style.opacity = '0.6';
+          span.appendChild(sym);
+          span.appendChild(nm);
+          info.appendChild(span);
+        });
+      }
+    }
+  }
+}
+
+/**
+ * Эклиптика — большой круг (наклон OBLIQUITY к экватору), строится в
+ * RA/Dec и рисуется через skyFrame(), поэтому движется вместе с небом.
+ * Солнце всё время лежит на ней.
+ */
+function renderEcliptic() {
+  var layer = state.svg.select('#layer-ecliptic');
+  var e     = state.ecliptic;
+
+  if (!state.showEcliptic) {
+    if (e.key !== null) { layer.selectAll('*').remove(); e.key = null; }
+    return;
+  }
+  var f = skyFrame();
+  if (e.key === f.key) return;
+  e.key = f.key;
+
+  layer.selectAll('*').remove();
+  styleLine(layer.append('path').datum(eclipticLine()).attr('d', f.path),
+    LINES_STYLE.ecliptic);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -813,6 +1156,8 @@ function renderStars() {
 function renderAstro() {
   renderNight();
   renderMilkyWay(); // v5.9.0
+  renderZodiac();   // v6.0.0
+  renderEcliptic(); // v6.0.0
 
   /* Очищаем хвостовые слои */
   ['trail-sun','trail-moon','trail-stars','trail-planets','trail-iss'].forEach(function(id) {
@@ -867,9 +1212,13 @@ function renderAstro() {
       layer.append('text').attr('x', px).attr('y', py).attr('dy', '0.38em')
         .attr('text-anchor', 'middle').attr('font-size', pl.r + 'px')
         .attr('pointer-events', 'none').text(pl.sym);
-      layer.append('text').attr('x', px + pl.r + 3).attr('y', py + 3)
-        .attr('fill', pl.color).attr('font-size', '8px')
-        .attr('font-family', 'monospace').attr('pointer-events', 'none')
+      var PL = PLANET_LABEL_STYLE;
+      layer.append('text').attr('x', px + pl.r + 3).attr('y', py).attr('dy', '0.35em')
+        .attr('fill', pl.color).attr('font-size', PL.size)
+        .attr('font-family', PL.family)
+        .attr('stroke', PL.halo).attr('stroke-width', PL.haloW)
+        .attr('paint-order', 'stroke')
+        .attr('pointer-events', 'none')
         .text(pl.label[state.lang] || pl.label.ru);
     });
   }

@@ -1,7 +1,25 @@
 /**
  * Файл    : frontend/static/main.js
- * Версия  : 5.9.0
+ * Версия  : 6.1.0
  * Модуль  : Инициализация, события, точки, утилиты
+ *
+ * Изменения 6.1.0:
+ *   - loadZodiac() — заодно грузит ZODIAC_STARS_URL (звёзды и фигуры);
+ *       ошибка этого файла не критична: зодиак работает без звёзд
+ *   - обработчик chk-zodiac-stars
+ *   - init() — блокировка масштабирования страницы жестом (iOS gesturestart,
+ *       мультитач вне карты): текст, значки и панель управления больше не
+ *       увеличиваются при щипке, зум карты работает как раньше
+ *
+ * Изменения 6.0.0:
+ *   - loadZodiac() — ленивая загрузка ZODIAC_URL при первом включении
+ *       чекбокса «Созвездия зодиака»; считает центроиды для подписей;
+ *       при ошибке чекбокс и флаг откатываются (как у Млечного Пути)
+ *   - init() — обработчики: chk-equator, chk-tropics (render()),
+ *       chk-ecliptic (панель времени + renderAstro()), chk-zodiac,
+ *       chk-zodiac-hl, chk-ophiuchus; блок #zodiac-opts виден только
+ *       при включённом зодиаке
+ *   - applyLang() — перерисовывает подписи линий и названия созвездий
  *
  * Изменения 5.9.0:
  *   - loadMilkyWay() — ленивая загрузка MILKYWAY_URL при первом включении
@@ -43,6 +61,7 @@
  *   - addPoint()                — добавление точки пользователем
  *   - loadData()                — загрузка GeoJSON + localStorage
  *   - loadMilkyWay()            — ленивая загрузка Млечного Пути (v5.9.0)
+ *   - loadZodiac()              — ленивая загрузка границ зодиака (v6.0.0)
  *   - applyLang()               — применение языка к DOM
  *   - applyCenter()             — смена центра карты
  *   - setStatus()               — обновление строки статуса
@@ -209,6 +228,54 @@ async function loadMilkyWay() {
   renderAstro();
 }
 
+/**
+ * Ленивая загрузка границ созвездий зодиака (v6.0.0).
+ * Вызывается при включении чекбокса; повторные вызовы безопасны.
+ * Центроиды считаются один раз — по ним ставятся подписи.
+ * После загрузки перерисовывает астро-слои.
+ */
+async function loadZodiac() {
+  var z = state.zodiac;
+  if (z.data || z.loading) return;
+  z.loading = true;
+
+  var statusEl = document.getElementById('status');
+  var prev     = statusEl ? statusEl.innerText : '';
+  setStatus(LANG[state.lang].loading);
+
+  try {
+    var data = await d3.json(ZODIAC_URL);
+    if (!data || !data.features || !data.features.length) {
+      throw new Error('bad zodiac.json');
+    }
+    var centers = {};
+    data.features.forEach(function(f) { centers[f.id] = d3.geoCentroid(f); });
+    z.data    = data;
+    z.centers = centers;
+    z.key     = null;
+    try {                                   // звёзды — необязательны
+      var zs = await d3.json(ZODIAC_STARS_URL);
+      z.stars = (zs && zs.stars && zs.lines) ? zs : null;
+    } catch(e2) {
+      console.warn('[main.js] zodiac-stars:', e2);
+      z.stars = null;
+    }
+    setStatus(prev);
+  } catch(err) {
+    console.error('[main.js] zodiac:', err);
+    setStatus('Ошибка загрузки зодиака: ' + err.message);
+    state.astro.showZodiac = false;
+    var chk = document.getElementById('chk-zodiac');
+    if (chk) chk.checked = false;
+    var opts = document.getElementById('zodiac-opts');
+    if (opts) opts.style.display = 'none';
+    updateAstroTimePanel();
+  } finally {
+    z.loading = false;
+  }
+  renderAstro();
+}
+
 /* ================================================================
    УТИЛИТЫ
 ================================================================ */
@@ -268,7 +335,11 @@ function applyLang() {
     btn.classList.toggle('active', btn.dataset.lang === state.lang);
   });
   updatePlayButtons();
-  if (state.projection) renderCities();
+  if (state.projection) {
+    renderCities();
+    renderLabels();   // v6.0.0 — названия экватора и тропиков
+    renderAstro();    // v6.0.0 — названия созвездий и строка «тело — созвездие»
+  }
 }
 
 /* ================================================================
@@ -609,6 +680,22 @@ async function init() {
     render();
   });
 
+  /* ── Линии карты (v6.0.0): экватор, тропики — географические,
+        от времени не зависят; эклиптика движется вместе с небом ── */
+  document.getElementById('chk-equator').addEventListener('change', function(e) {
+    state.showEquator = e.target.checked;
+    renderLines(); renderLabels();
+  });
+  document.getElementById('chk-tropics').addEventListener('change', function(e) {
+    state.showTropics = e.target.checked;
+    renderLines(); renderLabels();
+  });
+  document.getElementById('chk-ecliptic').addEventListener('change', function(e) {
+    state.showEcliptic = e.target.checked;
+    updateAstroTimePanel();   // эклиптике нужна панель времени
+    renderAstro();
+  });
+
   /* ── Линейка — кнопка на карте ───────────────────────────── */
   document.getElementById('btn-ruler-map').addEventListener('click', function() {
     toggleRuler(!state.ruler.active);
@@ -638,6 +725,36 @@ async function init() {
   document.getElementById('chk-milkyway').addEventListener('change', function(e) {
     if (e.target.checked) loadMilkyWay();
   });
+
+  /* Зодиак (v6.0.0): данные грузятся при первом включении; подчинённые
+     переключатели (подсветка, Змееносец) видны только при включённом зодиаке. */
+  document.getElementById('chk-zodiac').addEventListener('change', function(e) {
+    state.astro.showZodiac = e.target.checked;
+    var opts = document.getElementById('zodiac-opts');
+    if (opts) opts.style.display = e.target.checked ? 'block' : 'none';
+    updateAstroTimePanel();
+    renderAstro();
+    if (e.target.checked) loadZodiac();
+  });
+  document.getElementById('chk-zodiac-hl').addEventListener('change', function(e) {
+    state.astro.zodiacHighlight = e.target.checked;
+    renderAstro();
+  });
+  document.getElementById('chk-ophiuchus').addEventListener('change', function(e) {
+    state.astro.showOphiuchus = e.target.checked;
+    renderAstro();
+  });
+  document.getElementById('chk-zodiac-stars').addEventListener('change', function(e) {
+    state.astro.zodiacStars = e.target.checked;
+    renderAstro();
+  });
+
+  /* v6.1.0: щипок вне карты не должен масштабировать страницу (карта сама
+     обрабатывает мультитач через d3.zoom). */
+  document.addEventListener('gesturestart', function(e) { e.preventDefault(); });
+  document.addEventListener('touchmove', function(e) {
+    if (e.touches && e.touches.length > 1 && !e.target.closest('#map')) e.preventDefault();
+  }, { passive: false });
 
   /* ── Ползунок UTC (суточный) ─────────────────────────────── */
   document.getElementById('sun-slider').addEventListener('input', function(e) {

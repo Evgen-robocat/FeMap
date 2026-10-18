@@ -1,7 +1,18 @@
 <!DOCTYPE html>
 <!--
   Файл    : frontend/index.html
-  Версия  : 1.10.0 (HTML_V=11)
+  Версия  : 1.12.0 (HTML_V=15)
+  Изменения 6.1.0: cache-bust ?v=610 — chk-zodiac-stars (звёзды и фигуры
+                   созвездий) в блоке zodiac-opts; viewport без масштабирования
+                   страницы (maximum-scale=1, user-scalable=no); данные
+                   /data/zodiac-stars.json грузятся вместе с зодиаком
+  Изменения 6.0.0: cache-bust ?v=600 — зодиак с границами и подсветкой
+                   (chk-zodiac, подчинённые chk-zodiac-hl и chk-ophiuchus
+                   в блоке zodiac-opts), строка zodiac-info в панели времени;
+                   в группе чекбоксов карты: chk-equator, chk-tropics,
+                   chk-ecliptic. Данные /data/zodiac.json грузятся лениво
+  Изменения 5.9.2: cache-bust ?v=592 — фиолетовая заливка Млечного Пути (config.js)
+  Изменения 5.9.1: cache-bust ?v=591 — только ярче заливка Млечного Пути (config.js)
   Изменения 5.9.0: cache-bust ?v=590 — Млечный Путь: chk-milkyway
                    (после «Звёзды»), данные /data/milkyway.json грузятся
                    лениво при первом включении
@@ -12,11 +23,11 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>FlatEarthMap</title>
 
   <!-- 1. Стили — первыми чтобы не было мигания -->
-  <link rel="stylesheet" href="/static/style.css?v=590">
+  <link rel="stylesheet" href="/static/style.css?v=610">
 
   <!-- 2. D3.js v7 — до всех map-скриптов, они зависят от d3.* -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
@@ -31,11 +42,11 @@
   <!-- 5. Модули карты — строго в этом порядке:
        config → state → astro → render → main
        Каждый следующий видит глобальные переменные предыдущего -->
-  <script src="/static/config.js?v=590"></script>
-  <script src="/static/state.js?v=590"></script>
-  <script src="/static/astro.js?v=590"></script>
-  <script src="/static/render.js?v=590"></script>
-  <script src="/static/main.js?v=590"></script>
+  <script src="/static/config.js?v=610"></script>
+  <script src="/static/state.js?v=610"></script>
+  <script src="/static/astro.js?v=610"></script>
+  <script src="/static/render.js?v=610"></script>
+  <script src="/static/main.js?v=610"></script>
 
 </head>
 <body>
@@ -105,6 +116,22 @@
         <span class="checkbox-custom"></span>
         <span data-i18n="routesChk">✈ Маршруты рейсов</span>
       </label>
+      <!-- Линии (v6.0.0): экватор, тропики, эклиптика -->
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-equator">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="equatorChk">Экватор</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-tropics">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="tropicsChk">Тропики</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-ecliptic">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="eclipticChk">Эклиптика</span>
+      </label>
     </div>
 
     <!-- Чекбоксы астрономии -->
@@ -147,6 +174,30 @@
         <span class="checkbox-custom"></span>
         <span>🌌 Млечный Путь</span>
       </label>
+      <!-- Зодиак (v6.0.0) — границы 13 созвездий; подчинённые переключатели
+           видны только при включённом зодиаке -->
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-zodiac">
+        <span class="checkbox-custom"></span>
+        <span>♈ Созвездия зодиака</span>
+      </label>
+      <div id="zodiac-opts" style="display:none; padding-left:22px;">
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-zodiac-hl" checked>
+          <span class="checkbox-custom"></span>
+          <span>подсветка Солнца / Луны / планет</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-zodiac-stars" checked>
+          <span class="checkbox-custom"></span>
+          <span data-i18n="zodiacStarsChk">звёзды и фигуры созвездий</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-ophiuchus">
+          <span class="checkbox-custom"></span>
+          <span>Змееносец (13-е)</span>
+        </label>
+      </div>
     </div>
 
     <!-- Панель времени — скрыта если ни один астро-чекбокс не включён -->
@@ -215,6 +266,13 @@
                  style="flex:1; accent-color:#00ff88;">
         </div>
       </div>
+
+      <!-- Созвездия, в которых находятся показанные тела (v6.0.0);
+           заполняется из renderZodiac() -->
+      <div id="zodiac-info"
+           style="display:none; font-family:monospace; font-size:10px;
+                  color:#c8d8f0; line-height:1.6; text-align:center;
+                  margin:4px 0;"></div>
 
       <!-- Подсказка активного режима -->
       <div id="astro-mode-hint"
