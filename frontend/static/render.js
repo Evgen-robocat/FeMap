@@ -1,7 +1,16 @@
 /**
  * Файл    : frontend/static/render.js
- * Версия  : 6.2.0
+ * Версия  : 6.4.0
  * Модуль  : Рендеринг SVG-карты
+ *
+ * Изменения 6.4.0:
+ *   - densifyTrail(), renderTrailPath(): хвосты уплотняются по долготе/широте
+ *       и рисуются гладкими кривыми (раньше Солнце и звёзды шли ломаной);
+ *       renderTrailPolyline() теперь вызывает renderTrailPath()
+ *   - координаты у Солнца, Луны, МКС и планет — по отдельности
+ *       (state.astro.coordsOn); у планет подпись под маркером;
+ *       подписи координат с тёмной обводкой, читаются на любом фоне
+ *   - тултип МКС переведён (LANG.bodyIss, latShort/lonShort)
  *
  * Изменения 6.2.0:
  *   - маркеры и хвосты планет рисуются только для включённых (planetOn)
@@ -776,7 +785,43 @@ function renderEcliptic() {
  * @param {number}   bands
  * @param {number}   [maxOpacity=0.75]
  */
+/**
+ * Уплотняет хвост: между соседними точками добавляет промежуточные
+ * по долготе/широте (кратчайший путь по долготе через антимеридиан).
+ * Субточки тел за час сдвигаются по долготе на 15°, и хорды между ними
+ * дают ломаную; промежуточные точки идут вдоль параллели — линия гладкая.
+ * (v6.4.0)
+ * @param {Array}  coords — [[lon, lat], ...]
+ * @param {number} step   — макс. шаг по долготе/широте, градусы
+ * @returns {Array} новые координаты [[lon, lat], ...]
+ */
+function densifyTrail(coords, step) {
+  var n = coords.length;
+  if (n < 2 || !(step > 0)) return coords;
+  var out = [coords[0]];
+  for (var i = 1; i < n; i++) {
+    var a = coords[i - 1], b = coords[i];
+    var dl = ((b[0] - a[0] + 540) % 360) - 180;       // −180..180, кратчайший путь
+    var dp = b[1] - a[1];
+    var k  = Math.min(64, Math.max(1, Math.ceil(Math.max(Math.abs(dl), Math.abs(dp)) / step)));
+    for (var j = 1; j < k; j++) {
+      var f = j / k;
+      var lon = a[0] + dl * f;
+      lon = ((lon + 540) % 360) - 180;
+      out.push([lon, a[1] + dp * f]);
+    }
+    out.push(b);
+  }
+  return out;
+}
+
 function renderTrailPolyline(layerId, history, color, bands, maxOpacity) {
+  /* v6.4.0: хвосты рисуются через geoPath с уплотнением — гладкие кривые
+     вместо ломаных и корректный разрез на границе видимой области */
+  return renderTrailPath(layerId, history, color, bands, maxOpacity);
+}
+
+function renderTrailPolylineLegacy(layerId, history, color, bands, maxOpacity) {
   if (!history || history.length < 2) return;
 
   var layer = state.svg.select('#' + layerId);
@@ -853,6 +898,13 @@ function renderTrailPath(layerId, history, color, bands, maxOpacity) {
   var n       = history.length;
   var segSize = Math.max(1, Math.floor(n / bands));
 
+  /* шаг сглаживания: при очень длинных хвостах увеличиваем, чтобы не
+     превысить потолок точек (отдельный хвост на 365 суток × 24 ч = 8760 точек) */
+  var smoothStep = TRAIL_SMOOTH_STEP;
+  if (n * (15 / smoothStep) > TRAIL_SMOOTH_MAX_POINTS) {
+    smoothStep = Math.max(smoothStep, 15 * n / TRAIL_SMOOTH_MAX_POINTS);
+  }
+
   for (var b = 0; b < bands; b++) {
     var t       = (b + 1) / bands;
     var opacity = t * maxOpacity;
@@ -862,6 +914,7 @@ function renderTrailPath(layerId, history, color, bands, maxOpacity) {
 
     var segment = history.slice(iStart, iEnd + 1);
     if (segment.length < 2) continue;
+    segment = densifyTrail(segment, smoothStep);                 // v6.4.0
 
     layer.append('path')
       .datum({ type: 'LineString', coordinates: segment })
@@ -966,10 +1019,11 @@ function renderTrails() {
 function showIssTooltip(event, pt) {
   var tip = document.getElementById('iss-tooltip');
   if (!tip) return;
+  var L = LANG[state.lang];
   tip.innerHTML =
-    '<div style="font-weight:bold;color:#00ff88;margin-bottom:3px;">🛰 МКС / ISS</div>' +
-    '<div style="color:#a0c4d8;">Lat: <b>' + pt.lat.toFixed(2) + '°</b></div>' +
-    '<div style="color:#a0c4d8;">Lon: <b>' + pt.lon.toFixed(2) + '°</b></div>';
+    '<div style="font-weight:bold;color:#00ff88;margin-bottom:3px;">🛰 ' + L.bodyIss + '</div>' +
+    '<div style="color:#a0c4d8;">' + L.latShort + ': <b>' + pt.lat.toFixed(2) + '°</b></div>' +
+    '<div style="color:#a0c4d8;">' + L.lonShort + ': <b>' + pt.lon.toFixed(2) + '°</b></div>';
   var cx = event.clientX || 60;
   var cy = event.clientY || 60;
   var tx = cx + 14, ty = cy + 14;
@@ -1016,11 +1070,15 @@ function drawMarker(layerId, lon, lat, opts) {
   layer.append('text').attr('x', px).attr('y', py).attr('dy', '0.38em')
     .attr('text-anchor', 'middle').attr('font-size', (opts.r + 2) + 'px')
     .attr('pointer-events', 'none').text(opts.sym);
-  layer.append('text').attr('x', px).attr('y', py - opts.r - 5)
-    .attr('text-anchor', 'middle').attr('fill', opts.labelColor || '#ccc')
-    .attr('font-size', '9px').attr('font-family', 'monospace')
-    .attr('pointer-events', 'none')
-    .text(lat.toFixed(1) + '° ' + lon.toFixed(1) + '°');
+  if (opts.coords !== false) {            // v6.4.0: подпись координат отключаемая
+    layer.append('text').attr('x', px).attr('y', py - opts.r - 5)
+      .attr('text-anchor', 'middle').attr('fill', opts.labelColor || '#ccc')
+      .attr('font-size', '9px').attr('font-family', 'monospace')
+      .attr('stroke', 'rgba(0,0,0,0.65)').attr('stroke-width', 2.5)
+      .attr('paint-order', 'stroke')
+      .attr('pointer-events', 'none')
+      .text(lat.toFixed(1) + '° ' + lon.toFixed(1) + '°');
+  }
 }
 
 /**
@@ -1074,13 +1132,17 @@ function renderIss() {
       showIssTooltip(event, pt);
     });
 
-  /* Подпись координат над маркером */
-  layer.append('text')
-    .attr('x', px).attr('y', py - r - 5)
-    .attr('text-anchor', 'middle')
-    .attr('fill', ISS_COLOR).attr('font-size', '9px').attr('font-family', 'monospace')
-    .attr('pointer-events', 'none')
-    .text(pt.lat.toFixed(1) + '° ' + pt.lon.toFixed(1) + '°');
+  /* Подпись координат над маркером (v6.4.0: отключается в «Координаты тел») */
+  if (state.astro.coordsOn.Iss !== false) {
+    layer.append('text')
+      .attr('x', px).attr('y', py - r - 5)
+      .attr('text-anchor', 'middle')
+      .attr('fill', ISS_COLOR).attr('font-size', '9px').attr('font-family', 'monospace')
+      .attr('stroke', 'rgba(0,0,0,0.65)').attr('stroke-width', 2.5)
+      .attr('paint-order', 'stroke')
+      .attr('pointer-events', 'none')
+      .text(pt.lat.toFixed(1) + '° ' + pt.lon.toFixed(1) + '°');
+  }
 
   /* Метка "ISS" справа от маркера */
   layer.append('text')
@@ -1185,6 +1247,7 @@ function renderAstro() {
       fill: '#fbbf24', stroke: '#f97316',
       glow: 'rgba(251,191,36,0.15)',
       labelColor: '#fde68a',
+      coords: state.astro.coordsOn.Sun !== false,
     });
   }
 
@@ -1196,6 +1259,7 @@ function renderAstro() {
         fill: 'rgba(180,210,255,0.25)', stroke: '#8ab4e0',
         glow: 'rgba(180,210,255,0.10)',
         labelColor: '#c8deff',
+        coords: state.astro.coordsOn.Moon !== false,
       });
     }
   }
@@ -1225,6 +1289,16 @@ function renderAstro() {
         .attr('paint-order', 'stroke')
         .attr('pointer-events', 'none')
         .text(pl.label[state.lang] || pl.label.ru);
+      if (state.astro.coordsOn[pl.key]) {          // v6.4.0
+        layer.append('text').attr('x', px).attr('y', py + pl.r + 11)
+          .attr('text-anchor', 'middle')
+          .attr('fill', pl.color).attr('font-size', '9px')
+          .attr('font-family', PL.family)
+          .attr('stroke', PL.halo).attr('stroke-width', PL.haloW)
+          .attr('paint-order', 'stroke')
+          .attr('pointer-events', 'none')
+          .text(pp.lat.toFixed(1) + '° ' + pp.lon.toFixed(1) + '°');
+      }
     });
   }
 

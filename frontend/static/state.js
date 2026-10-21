@@ -1,7 +1,12 @@
 /**
  * Файл    : frontend/static/state.js
- * Версия  : 6.2.0
+ * Версия  : 6.4.0
  * Модуль  : Глобальное состояние приложения
+ *
+ * Изменения 6.4.0:
+ *   - state.astro.coordsOn — { Sun, Moon, Iss, Mercury … Neptune: bool }:
+ *       у каких тел рисовать подпись координат субточки
+ *       (Солнце, Луна, МКС — по умолчанию да, как раньше; планеты — нет)
  *
  * Изменения 6.2.0:
  *   - state.astro.planetsOn — { Mercury:true, …, Neptune:true }: какие планеты
@@ -128,6 +133,8 @@ var state = {
     showNight:   false,
     showMoon:    false,
     showPlanets: false,
+    coordsOn: { Sun:true, Moon:true, Iss:true, Mercury:false, Venus:false, Mars:false,
+                Jupiter:false, Saturn:false, Uranus:false, Neptune:false },  // v6.4.0
     planetsOn: { Mercury:true, Venus:true, Mars:true, Jupiter:true,
                  Saturn:true, Uranus:true, Neptune:true },  // v6.2.0
     showStars:   false,

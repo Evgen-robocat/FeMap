@@ -1,7 +1,13 @@
 /**
  * Файл    : frontend/static/astro.js
- * Версия  : 6.2.0
+ * Версия  : 6.4.0
  * Модуль  : Астрономические вычисления и управление временем
+ *
+ * Изменения 6.4.0:
+ *   - updateAstroDisplay() синхронизирует поле календаря #inp-astro-datetime
+ *   - jumpToEclipse(kind) — прыжок к ближайшему после текущей даты солнечному
+ *       ('solar') или лунному ('lunar') затмению (astronomy-engine), результат
+ *       пишется в #ecl-info; setDateFromInput() — дата из календаря (UTC)
  *
  * Изменения 6.2.0:
  *   - planetOn(key) — планета показана: общий чекбокс включён и её собственный тоже;
@@ -597,6 +603,66 @@ function updateAstroDisplay() {
   el.textContent =
     d.getUTCFullYear() + '-' + pad2(d.getUTCMonth() + 1) + '-' + pad2(d.getUTCDate()) +
     '  ' + pad2(d.getUTCHours()) + ':' + pad2(d.getUTCMinutes()) + ' UTC';
+
+  /* поле календаря: значение — «YYYY-MM-DDTHH:MM» в UTC (v6.4.0) */
+  var inp = document.getElementById('inp-astro-datetime');
+  if (inp) {
+    var iso = d.toISOString();                 // 2026-05-14T05:49:00.000Z
+    var v = iso.slice(0, 16);
+    if (/^\d{4}-/.test(v) && inp.value !== v) inp.value = v;
+  }
+}
+
+/**
+ * Дата и время из поля календаря (трактуются как UTC). Останавливает
+ * анимацию и ставит время вручную (хвосты сбрасываются). (v6.4.0)
+ */
+function setDateFromInput(value) {
+  if (!value) return false;
+  var m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value);
+  if (!m) return false;
+  var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]));
+  if (isNaN(d.getTime())) return false;
+  astroPause();
+  setAstroDate(d, true);
+  return true;
+}
+
+/**
+ * Находит следующее после текущей даты затмение и переходит к его максимуму.
+ * @param {'solar'|'lunar'} kind
+ * @returns {{ kind: string, name: string, date: Date }|null}
+ */
+function jumpToEclipse(kind) {
+  var t = LANG[state.lang];
+  var info = document.getElementById('ecl-info');
+  var say = function(txt) { if (info) info.textContent = txt; };
+  if (!astroOk()) { say(t.eclNeedLib); return null; }
+  try {
+    var from = new Date(state.astro.date.getTime() + 60000);   // строго после текущего момента
+    var search = function(d) { return (kind === 'solar') ? Astronomy.SearchGlobalSolarEclipse(d)
+                                                          : Astronomy.SearchLunarEclipse(d); };
+    var e = search(from);
+    /* движок ищет по новолуниям/полнолуниям, пик может оказаться чуть раньше
+       текущего момента — тогда берём следующее */
+    for (var guard = 0; e && e.peak && e.peak.date.getTime() <= from.getTime() && guard < 3; guard++) {
+      e = search(new Date(e.peak.date.getTime() + 10 * 86400000));
+    }
+    if (!e || !e.peak) { say(t.eclNotFound); return null; }
+    var peak = e.peak.date;
+    var kindKey = { total:'eclTotal', annular:'eclAnnular', partial:'eclPartial',
+                    penumbral:'eclPenumbral', hybrid:'eclHybrid' }[String(e.kind).toLowerCase()];
+    var kindTxt = kindKey ? t[kindKey] : String(e.kind);
+    var name = (kind === 'solar' ? t.eclSolarName : t.eclLunarName) + ' (' + kindTxt + ')';
+    astroPause();
+    setAstroDate(new Date(peak.getTime()), true);
+    say(name);
+    return { kind: kind, name: name, date: peak };
+  } catch (err) {
+    console.warn('[astro] eclipse search:', err && err.message || err);
+    say(t.eclNotFound);
+    return null;
+  }
 }
 
 /**

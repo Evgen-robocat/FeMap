@@ -1,7 +1,8 @@
 /*
   Файл    : public/static/style.css
-  Версия  : 4.5.0
-  Дата    : 2026-10-18
+  Версия  : 4.6.0
+  Дата    : 2026-10-19
+  Изменения 4.6.0 (FeMap 6.4.0): .lang-select — язык выпадающим списком
   Изменения 4.5.0 (FeMap 6.1.0): щипок вне карты не масштабирует страницу —
     touch-action: pan-x pan-y на html/body, text-size-adjust: 100%,
     overscroll-behavior: none; карта (#map) обрабатывает жесты сама (d3.zoom)
@@ -310,6 +311,17 @@ input[type="text"] {
   background: #3a8abf;
   border-color: #fff;
   box-shadow: 0 0 15px rgba(58, 138, 191, 0.6);
+}
+
+.lang-select {
+  background: #152535;
+  color: #a0d8ef;
+  border: 1px solid #3a8abf;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color-scheme: dark;
 }
 
 /* Mobile Layout */

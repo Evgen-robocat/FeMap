@@ -1,7 +1,26 @@
 /**
  * Файл    : frontend/static/config.js
- * Версия  : 6.2.0
+ * Версия  : 6.4.2
+ *
+ * Изменения 6.4.2:
+ *   - ANALYTICS_URL указывает на Worker статистики (femap-stats.femap-lab.workers.dev)
+ *
+ * Изменения 6.4.1:
+ *   - borders.geojson: убраны две «спорные» линии вокруг Крыма (NE_ID 1746708787,
+ *       1746708837); BORDERS_URL с ?v=641 против кэша
  * Модуль  : Константы и статические данные
+ *
+ * Изменения 6.4.0:
+ *   - VERSION → '6.4.2'
+ *   - LANG (ru/en/de): все надписи панели (слои, кнопки времени, заголовки),
+ *       календарь и затмения (dateLabel, ecl*), координаты тел (coordsTitle,
+ *       bodySun/Moon/Iss, latShort/lonShort), ошибки загрузки (err*)
+ *   - TRAIL_SMOOTH_STEP, TRAIL_SMOOTH_MAX_POINTS — сглаживание хвостов
+ *
+ * Изменения 6.3.0:
+ *   - VERSION → '6.3.0'
+ *   - ANALYTICS_URL — адрес своего счётчика (Cloudflare Worker, см. analytics/);
+ *     пусто — статистика выключена, ничего не отправляется
  *
  * Изменения 6.2.0:
  *   - VERSION → '6.2.0' (каждая планета — отдельный переключатель, см. state.js)
@@ -63,7 +82,7 @@
 
 'use strict';
 
-var VERSION = window.FEMAP_VERSION || '6.2.0';
+var VERSION = window.FEMAP_VERSION || '6.4.2';
 
 /* ═══════════════════════════════════════════════════════════════
    ЦВЕТА
@@ -256,6 +275,28 @@ var LANG = {
     trailDays:      'дн',
     trailHours:     'ч',
     trailMinutes:   'мин',        // v5.8.0 — единица для хвоста МКС
+    // ── v6.4.0: надписи панели, календарь, координаты, ошибки ───
+    sunChk:'☀ Солнце', nightChk:'🌓 День / Ночь', moonChk:'🌙 Луна',
+    planetsChk:'🪐 Планеты', issChk:'🛰 МКС', starsChk:'✦ Звёзды',
+    milkywayChk:'🌌 Млечный Путь', zodiacChk:'♈ Созвездия зодиака',
+    zodiacHlChk:'подсветка Солнца / Луны / планет', ophiuchusChk:'Змееносец (13-е)',
+    yearLbl:'год', prevDay:'← День', nowBtn:'⊙ Сейчас', nextDay:'День →',
+    speedLbl:'×скор',
+    playHourTitle:'Суточная анимация: шаг 1 час',
+    playDayTitle:'Годовая анимация: шаг 1 сутки',
+    playSidTitle:'Звёздные сутки: шаг 23ч 56м 4с',
+    playIssTitle:'МКС: шаг 1 мин × скорость',
+    coordsTitle:'📍 Координаты тел',
+    bodySun:'Солнце', bodyMoon:'Луна', bodyIss:'МКС',
+    latShort:'Шир.', lonShort:'Долг.',
+    dateLabel:'Дата и время (UTC)',
+    eclSolar:'☀ след. затмение', eclLunar:'🌙 след. затмение',
+    eclSolarName:'Солнечное затмение', eclLunarName:'Лунное затмение',
+    eclTotal:'полное', eclAnnular:'кольцеобразное', eclPartial:'частное',
+    eclPenumbral:'полутеневое', eclHybrid:'гибридное',
+    eclNotFound:'Затмение не найдено', eclNeedLib:'Нужна библиотека astronomy-engine',
+    errLoad:'Ошибка загрузки', errMilky:'Ошибка загрузки Млечного Пути',
+    errZodiac:'Ошибка загрузки зодиака',
   },
   en: {
     latLabel:'Center Latitude', lonLabel:'Center Longitude',
@@ -291,6 +332,28 @@ var LANG = {
     trailDays:      'days',
     trailHours:     'h',
     trailMinutes:   'min',        // v5.8.0
+    // ── v6.4.0 ───────────────────────────────────────────────
+    sunChk:'☀ Sun', nightChk:'🌓 Day / Night', moonChk:'🌙 Moon',
+    planetsChk:'🪐 Planets', issChk:'🛰 ISS', starsChk:'✦ Stars',
+    milkywayChk:'🌌 Milky Way', zodiacChk:'♈ Zodiac constellations',
+    zodiacHlChk:'highlight Sun / Moon / planets', ophiuchusChk:'Ophiuchus (13th)',
+    yearLbl:'year', prevDay:'← Day', nowBtn:'⊙ Now', nextDay:'Day →',
+    speedLbl:'×speed',
+    playHourTitle:'Daily animation: step 1 hour',
+    playDayTitle:'Annual animation: step 1 day',
+    playSidTitle:'Sidereal day: step 23h 56m 4s',
+    playIssTitle:'ISS: step 1 min × speed',
+    coordsTitle:'📍 Body coordinates',
+    bodySun:'Sun', bodyMoon:'Moon', bodyIss:'ISS',
+    latShort:'Lat', lonShort:'Lon',
+    dateLabel:'Date and time (UTC)',
+    eclSolar:'☀ next eclipse', eclLunar:'🌙 next eclipse',
+    eclSolarName:'Solar eclipse', eclLunarName:'Lunar eclipse',
+    eclTotal:'total', eclAnnular:'annular', eclPartial:'partial',
+    eclPenumbral:'penumbral', eclHybrid:'hybrid',
+    eclNotFound:'No eclipse found', eclNeedLib:'astronomy-engine library is required',
+    errLoad:'Load error', errMilky:'Milky Way load error',
+    errZodiac:'Zodiac load error',
   },
   de: {
     latLabel:'Breite Mittelpunkt', lonLabel:'Länge Mittelpunkt',
@@ -326,6 +389,28 @@ var LANG = {
     trailDays:      'Tage',
     trailHours:     'Std',
     trailMinutes:   'Min',       // v5.8.0
+    // ── v6.4.0 ───────────────────────────────────────────────
+    sunChk:'☀ Sonne', nightChk:'🌓 Tag / Nacht', moonChk:'🌙 Mond',
+    planetsChk:'🪐 Planeten', issChk:'🛰 ISS', starsChk:'✦ Sterne',
+    milkywayChk:'🌌 Milchstraße', zodiacChk:'♈ Tierkreis-Sternbilder',
+    zodiacHlChk:'Sonne / Mond / Planeten hervorheben', ophiuchusChk:'Schlangenträger (13.)',
+    yearLbl:'Jahr', prevDay:'← Tag', nowBtn:'⊙ Jetzt', nextDay:'Tag →',
+    speedLbl:'×Tempo',
+    playHourTitle:'Tagesanimation: Schritt 1 Stunde',
+    playDayTitle:'Jahresanimation: Schritt 1 Tag',
+    playSidTitle:'Sterntag: Schritt 23h 56m 4s',
+    playIssTitle:'ISS: Schritt 1 Min × Tempo',
+    coordsTitle:'📍 Koordinaten der Körper',
+    bodySun:'Sonne', bodyMoon:'Mond', bodyIss:'ISS',
+    latShort:'Br.', lonShort:'Lg.',
+    dateLabel:'Datum und Zeit (UTC)',
+    eclSolar:'☀ nächste Finsternis', eclLunar:'🌙 nächste Finsternis',
+    eclSolarName:'Sonnenfinsternis', eclLunarName:'Mondfinsternis',
+    eclTotal:'total', eclAnnular:'ringförmig', eclPartial:'partiell',
+    eclPenumbral:'Halbschatten', eclHybrid:'hybrid',
+    eclNotFound:'Keine Finsternis gefunden', eclNeedLib:'Bibliothek astronomy-engine erforderlich',
+    errLoad:'Ladefehler', errMilky:'Fehler beim Laden der Milchstraße',
+    errZodiac:'Fehler beim Laden des Tierkreises',
   },
 };
 
@@ -365,7 +450,7 @@ var GRID_STEP = [30, 30];
 
 /* URL GeoJSON данных */
 var LAND_URL    = '/data/land.geojson';
-var BORDERS_URL = '/data/borders.geojson';
+var BORDERS_URL = '/data/borders.geojson?v=641';
 
 /* ── Млечный Путь (v5.9.0) ──────────────────────────────────────
    Данные: d3-celestial (Olaf Frohn), лицензия BSD-3 — см.
@@ -411,6 +496,14 @@ var ZODIAC_STARS_URL = '/data/zodiac-stars.json';
 
 /* Размер звезды (диаметр, px) по звёздной величине: первое подходящее
    условие mag < max. Линии фигур — тонкие, подсвеченного созвездия — ярче. */
+/* ── Своя статистика посещений (v6.3.0) ───────────────────────
+   Адрес Worker'а без слэша в конце, например
+   'https://femap-stats.ИМЯ.workers.dev'. Пустая строка — выключено.
+   Отправляются: просмотр страницы и включение слоёв (id чекбокса),
+   домен источника, язык интерфейса, ширина экрана. Без cookie, без IP.
+   Не отправляется: с localhost и локальных адресов, при Do Not Track. */
+var ANALYTICS_URL = 'https://femap-stats.femap-lab.workers.dev';
+
 var ZODIAC_STARS_STYLE = {
   sizes:     [ { max: 1.5, d: 6 }, { max: 2.5, d: 4.6 }, { max: 3.5, d: 3.5 },
                { max: 4.5, d: 2.6 }, { max: 99, d: 2 } ],
@@ -522,6 +615,12 @@ var ISS_SPEED_OPTIONS = [1, 10, 20, 100];
    Каждый хвост делится на N полос, opacity нарастает от хвоста (0)
    к голове (1). Больше полос = плавнее градиент, но больше DOM-узлов.
 ══════════════════════════════════════════════════════════════════ */
+/* Сглаживание хвостов (v6.4.0): между соседними точками истории добавляются
+   промежуточные по долготе/широте (движение тел идёт вдоль параллелей),
+   максимальный шаг по долготе в градусах. Меньше — глаже, но тяжелее. */
+var TRAIL_SMOOTH_STEP = 3;
+var TRAIL_SMOOTH_MAX_POINTS = 30000;   // общий потолок точек на один хвост
+
 var TRAIL_BANDS = {
   sunMoon: 15,  // полос для хвостов Солнца и Луны
   planets: 15,  // полос для хвостов планет (v5.7.0)

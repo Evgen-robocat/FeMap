@@ -1,7 +1,20 @@
 /**
  * Файл    : frontend/static/main.js
- * Версия  : 6.2.0
+ * Версия  : 6.4.0
  * Модуль  : Инициализация, события, точки, утилиты
+ *
+ * Изменения 6.4.0:
+ *   - язык — выпадающий список #lang-select вместо трёх кнопок
+ *   - applyLang(): переводит и атрибуты title (data-i18n-title), подписи
+ *       чекбоксов координат тел; сообщения об ошибках — через LANG
+ *   - buildCoordsOpts() — чекбоксы «Координаты тел» (Солнце, Луна, планеты, МКС)
+ *   - обработчики календаря #inp-astro-datetime и кнопок затмений
+ *
+ * Изменения 6.3.0:
+ *   - track(ev, meta), initAnalytics() — своя статистика (ANALYTICS_URL):
+ *       событие 'view' при загрузке и 'on' при включении любого чекбокса
+ *       (делегированный обработчик, ловит и динамические чекбоксы планет);
+ *       sendBeacon, без cookie; не работает на localhost и при Do Not Track
  *
  * Изменения 6.2.0:
  *   - buildPlanetOpts() — под чекбоксом «Планеты» создаёт чекбокс на каждую
@@ -194,7 +207,7 @@ async function loadData() {
     console.error('[main.js]', err);
     state.land    = { type:'FeatureCollection', features:[] };
     state.borders = { type:'FeatureCollection', features:[] };
-    setStatus('Ошибка загрузки: ' + err.message);
+    setStatus(LANG[state.lang].errLoad + ': ' + err.message);
   }
 }
 
@@ -222,7 +235,7 @@ async function loadMilkyWay() {
     setStatus(prev);
   } catch(err) {
     console.error('[main.js] milkyway:', err);
-    setStatus('Ошибка загрузки Млечного Пути: ' + err.message);
+    setStatus(LANG[state.lang].errMilky + ': ' + err.message);
     state.astro.showMilkyWay = false;
     var chk = document.getElementById('chk-milkyway');
     if (chk) chk.checked = false;
@@ -268,7 +281,7 @@ async function loadZodiac() {
     setStatus(prev);
   } catch(err) {
     console.error('[main.js] zodiac:', err);
-    setStatus('Ошибка загрузки зодиака: ' + err.message);
+    setStatus(LANG[state.lang].errZodiac + ': ' + err.message);
     state.astro.showZodiac = false;
     var chk = document.getElementById('chk-zodiac');
     if (chk) chk.checked = false;
@@ -325,6 +338,42 @@ function toggleRuler(active) {
    МУЛЬТИЯЗЫЧНОСТЬ
 ================================================================ */
 
+/* ── Координаты тел (v6.4.0) ───────────────────────────────── */
+var CO_KEYS = ['Sun', 'Moon'].concat(PLANETS.map(function(p) { return p.key; }), ['Iss']);
+
+function coordsOptLabel(k) {
+  var t = LANG[state.lang];
+  if (k === 'Sun')  return '☀ ' + t.bodySun;
+  if (k === 'Moon') return '🌙 ' + t.bodyMoon;
+  if (k === 'Iss')  return '🛰 ' + t.bodyIss;
+  for (var i = 0; i < PLANETS.length; i++) {
+    if (PLANETS[i].key === k) return planetOptLabel(PLANETS[i]);
+  }
+  return k;
+}
+
+function buildCoordsOpts() {
+  var box = document.getElementById('coords-opts');
+  if (!box) return;
+  box.textContent = '';
+  CO_KEYS.forEach(function(k) {
+    var lab = document.createElement('label');
+    lab.className = 'checkbox-label';
+    var inp = document.createElement('input');
+    inp.type = 'checkbox'; inp.id = 'chk-co-' + k;
+    inp.checked = state.astro.coordsOn[k] !== false && !!state.astro.coordsOn[k];
+    inp.addEventListener('change', function(e) {
+      state.astro.coordsOn[k] = e.target.checked;
+      renderAstro();
+    });
+    var box2 = document.createElement('span'); box2.className = 'checkbox-custom';
+    var txt  = document.createElement('span'); txt.id = 'lbl-co-' + k;
+    txt.textContent = coordsOptLabel(k);
+    lab.appendChild(inp); lab.appendChild(box2); lab.appendChild(txt);
+    box.appendChild(lab);
+  });
+}
+
 function planetOptLabel(pl) {
   return pl.sym + ' ' + (pl.label[state.lang] || pl.label.ru);
 }
@@ -368,8 +417,15 @@ function applyLang() {
     var key = el.dataset.i18nPlaceholder;
     if (t[key] !== undefined) el.placeholder = t[key];
   });
-  document.querySelectorAll('.btn-lang').forEach(function(btn) {
-    btn.classList.toggle('active', btn.dataset.lang === state.lang);
+  document.querySelectorAll('[data-i18n-title]').forEach(function(el) {   // v6.4.0
+    var key = el.dataset.i18nTitle;
+    if (t[key] !== undefined) el.title = t[key];
+  });
+  var langSel = document.getElementById('lang-select');
+  if (langSel && langSel.value !== state.lang) langSel.value = state.lang;
+  CO_KEYS.forEach(function(k) {
+    var el = document.getElementById('lbl-co-' + k);
+    if (el) el.textContent = coordsOptLabel(k);
   });
   updatePlayButtons();
   if (state.projection) {
@@ -761,6 +817,7 @@ async function init() {
     });
   });
   buildPlanetOpts();
+  buildCoordsOpts();   // v6.4.0
 
   /* Млечный Путь — данные грузятся при первом включении (v5.9.0).
      Слушатель стоит после общего, поэтому флаг уже выставлен. */
@@ -884,18 +941,24 @@ async function init() {
   document.getElementById('btn-add-point').addEventListener('click', addPoint);
 
   /* ── Переключение языка ──────────────────────────────────── */
-  document.querySelectorAll('.btn-lang').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      state.lang = btn.dataset.lang;
-      localStorage.setItem('femap_lang', state.lang);
-      applyLang();
-      refreshPointsList();
-      var t  = LANG[state.lang];
-      var nL = state.land && state.land.features ? state.land.features.length : 0;
-      var nB = state.borders && state.borders.features ? state.borders.features.length : 0;
-      setStatus('v' + VERSION + ' · ' + nL + ' ' + t.polygons + ' · ' + nB + ' ' + t.bordersCount);
-    });
+  var langSelect = document.getElementById('lang-select');
+  langSelect.value = state.lang;
+  langSelect.addEventListener('change', function() {
+    state.lang = langSelect.value;
+    localStorage.setItem('femap_lang', state.lang);
+    applyLang();
+    refreshPointsList();
+    var t  = LANG[state.lang];
+    var nL = state.land && state.land.features ? state.land.features.length : 0;
+    var nB = state.borders && state.borders.features ? state.borders.features.length : 0;
+    setStatus('v' + VERSION + ' · ' + nL + ' ' + t.polygons + ' · ' + nB + ' ' + t.bordersCount);
   });
+
+  /* ── Календарь и затмения (v6.4.0) ─────────────────────────── */
+  var dt = document.getElementById('inp-astro-datetime');
+  dt.addEventListener('change', function() { setDateFromInput(dt.value); });
+  document.getElementById('btn-ecl-solar').addEventListener('click', function() { jumpToEclipse('solar'); });
+  document.getElementById('btn-ecl-lunar').addEventListener('click', function() { jumpToEclipse('lunar'); });
 
   /* ── Панель хвостов (v5.6.0) ─────────────────────────────── */
   injectTrailControls();
@@ -903,6 +966,44 @@ async function init() {
 
   updateAstroDisplay();
   applyLang();
+  initAnalytics();
+}
+
+/* ================================================================
+   СТАТИСТИКА (v6.3.0) — см. analytics/worker.js
+================================================================ */
+
+function analyticsEnabled() {
+  if (!ANALYTICS_URL) return false;
+  var h = location.hostname;
+  if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || /^(10|192\.168)\./.test(h) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(h) || /\.local$/.test(h) || location.protocol === 'file:') return false;
+  if (navigator.doNotTrack === '1' || window.doNotTrack === '1') return false;
+  return true;
+}
+
+function track(ev, meta) {
+  if (!analyticsEnabled()) return;
+  try {
+    var ref = document.referrer || '';
+    try { if (ref && new URL(ref).hostname === location.hostname) ref = ''; } catch (e) { ref = ''; }
+    var body = JSON.stringify({
+      ev: ev, meta: meta || '', ref: ref, lang: state.lang, w: window.innerWidth
+    });
+    var url = ANALYTICS_URL + '/hit';
+    if (!(navigator.sendBeacon && navigator.sendBeacon(url, new Blob([body], { type: 'text/plain' })))) {
+      fetch(url, { method: 'POST', body: body, mode: 'no-cors', keepalive: true });
+    }
+  } catch (e) { /* статистика никогда не должна ломать карту */ }
+}
+
+function initAnalytics() {
+  if (!analyticsEnabled()) return;
+  track('view');
+  document.addEventListener('change', function(e) {
+    var el = e.target;
+    if (el && el.type === 'checkbox' && el.checked && el.id) track('on', el.id);
+  });
 }
 
 /* ================================================================
