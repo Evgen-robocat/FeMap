@@ -1,0 +1,10 @@
+timezones.json — границы часовых поясов (упрощённые, ~0.01° / допуск 0.08°).
+Источник: timezone-boundary-builder, релиз 2026e (https://github.com/evansiroky/timezone-boundary-builder),
+основан на данных OpenStreetMap.
+Лицензия данных: ODbL 1.0 — https://opendatacommons.org/licenses/odbl/1-0/
+© OpenStreetMap contributors, © Evan Siroky и участники timezone-boundary-builder.
+
+Изменения: геометрия упрощена с сохранением общих границ; зона Europe/Simferopol
+объединена с Europe/Kyiv (границы Украины, признанные международным правом);
+добавлено поле "o" — стандартное смещение UTC в минутах (запасное значение).
+Фактическое смещение на выбранную дату считается в браузере по базе IANA (Intl).

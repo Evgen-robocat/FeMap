@@ -1,6 +1,6 @@
 /**
  * Файл    : frontend/static/state.js
- * Версия  : 6.4.0
+ * Версия  : 6.7.0
  * Модуль  : Глобальное состояние приложения
  *
  * Изменения 6.4.0:
@@ -81,6 +81,8 @@ var state = {
   showEquator:  false,  // v6.0.0 — экватор (широта 0°)
   showTropics:  false,  // v6.0.0 — тропики (широта ±TROPIC_LAT)
   showEcliptic: false,  // v6.0.0 — эклиптика (зависит от времени)
+  showTimezones: false, // v6.5.0 — часовые пояса
+  tz: { data: null, loading: false, key: '', offKey: null, offSig: '', sigGroups: '', groups: [], drawn: false },   // v6.7.0
 
   /* ── Данные ────────────────────────────────────────────── */
   land:    null,      // GeoJSON суши (загружается async)
@@ -141,16 +143,18 @@ var state = {
     showIss:     false,   // v5.8.0 — маркер субточки МКС
     showMilkyWay: false,  // v5.9.0 — Млечный Путь
     showZodiac:   false,  // v6.0.0 — границы созвездий зодиака
+    showShadow:   false,  // v6.6.0 — тень Земли (умбра / пенумбра)
+    showNodes:    false,  // v6.6.0 — узлы Луны (Раху / Кету) и орбита Луны
     zodiacHighlight: true,   // v6.0.0 — подсвечивать созвездие Солнца/Луны/планет
     showOphiuchus:   false,  // v6.0.0 — 13-е созвездие (Змееносец)
     zodiacStars:     true,   // v6.1.0 — звёзды и фигуры созвездий зодиака
 
     date:        new Date(),   // текущий момент времени для расчётов
     playing:     false,
-    playMode:    null,         // null | 'hour' | 'day' | 'sidereal' | 'iss'
+    playMode:    null,         // null | 'speed' | 'day' | 'sidereal'
     timer:       null,         // id от setInterval
 
-    issSpeed:    1,            // v5.8.0 — множитель скорости режима 'iss'
+    speed:       1,            // v6.5.0 — множитель скорости режима 'speed' (×1 = реальное время)
                                // 1 = реальная скорость (1 мин/кадр)
                                // 10, 20, 100 = ускорение
 

@@ -1,6 +1,20 @@
 /**
  * Файл    : frontend/static/main.js
- * Версия  : 6.4.0
+ * Версия  : 6.7.0
+ *
+ * Изменения 6.7.0:
+ *   - loadTimezones() — ленивая загрузка data/timezones.json при первом включении
+
+ *
+ * Изменения 6.6.0:
+ *   - chk-shadow, chk-nodes; флаг ?me=1 / ?me=0 — не считать свои заходы
+ *       в статистике (хранится в localStorage femap_me)
+
+ *
+ * Изменения 6.5.0:
+ *   - обработчики скорости (btn-spd-*, slider-speed, btn-speed-play), чекбокс
+ *       chk-timezones; обрезка хвостов по времени (trimTimed)
+
  * Модуль  : Инициализация, события, точки, утилиты
  *
  * Изменения 6.4.0:
@@ -244,6 +258,40 @@ async function loadMilkyWay() {
     mw.loading = false;
   }
   renderAstro();
+}
+
+/**
+ * Загружает реальные границы часовых поясов при первом включении (v6.7.0).
+ */
+async function loadTimezones() {
+  var tz = state.tz;
+  if (tz.data || tz.loading) return;
+  tz.loading = true;
+  var statusEl = document.getElementById('status');
+  var prev = statusEl ? statusEl.innerText : '';
+  setStatus(LANG[state.lang].tzLoading);
+  try {
+    var data = await d3.json(TZ_URL);
+    if (!data || !data.features || !data.features.length) throw new Error('bad timezones.json');
+    data.features.forEach(function(f) {
+      f._etc = /^Etc\//.test(f.properties.z);
+      f._areas = f.geometry.coordinates.map(function(poly) {
+        return d3.geoArea({ type: 'Polygon', coordinates: poly });
+      });
+    });
+    tz.data = data; tz.offKey = null; tz.sigGroups = '';
+    setStatus(prev);
+    renderTimezones(true);
+    renderLabels();
+  } catch (err) {
+    console.error('[main.js] timezones:', err);
+    setStatus(LANG[state.lang].errTz + ': ' + err.message);
+    state.showTimezones = false;
+    var chk = document.getElementById('chk-timezones');
+    if (chk) chk.checked = false;
+  } finally {
+    tz.loading = false;
+  }
 }
 
 /**
@@ -615,8 +663,7 @@ function bindTrailHandlers() {
   if (slSun) slSun.addEventListener('input', function() {
     var days = parseInt(this.value, 10);
     state.astro.trails.sun.days = days;
-    var h = state.astro.trails.sun.history, mx = days * 24;
-    while (h.length > mx) h.shift();
+    trimTimed(state.astro.trails.sun.history, days * 86400000);
     var sp = document.getElementById('val-trail-sun');
     if (sp) sp.textContent = days;
   });
@@ -632,8 +679,7 @@ function bindTrailHandlers() {
   if (slMoon) slMoon.addEventListener('input', function() {
     var days = parseInt(this.value, 10);
     state.astro.trails.moon.days = days;
-    var h = state.astro.trails.moon.history, mx = days * 24;
-    while (h.length > mx) h.shift();
+    trimTimed(state.astro.trails.moon.history, days * 86400000);
     var sp = document.getElementById('val-trail-moon');
     if (sp) sp.textContent = days;
   });
@@ -654,8 +700,7 @@ function bindTrailHandlers() {
     var hours = parseInt(this.value, 10);
     state.astro.trails.stars.hours = hours;
     for (var i = 0; i < state.astro.trails.stars.history.length; i++) {
-      var h = state.astro.trails.stars.history[i];
-      while (h.length > hours) h.shift();
+      trimTimed(state.astro.trails.stars.history[i], hours * 3600000);
     }
     var sp = document.getElementById('val-trail-stars');
     if (sp) sp.textContent = hours;
@@ -677,12 +722,10 @@ function bindTrailHandlers() {
   if (slPlanets) slPlanets.addEventListener('input', function() {
     var days = parseInt(this.value, 10);
     state.astro.trails.planets.days = days;
-    var maxPts = days * 24;
     var ph = state.astro.trails.planets.history;
     for (var pk in ph) {
       if (Object.prototype.hasOwnProperty.call(ph, pk)) {
-        var h = ph[pk];
-        while (h.length > maxPts) h.shift();
+        trimTimed(ph[pk], days * 86400000);
       }
     }
     var sp = document.getElementById('val-trail-planets');
@@ -700,8 +743,7 @@ function bindTrailHandlers() {
   if (slIss) slIss.addEventListener('input', function() {
     var minutes = parseInt(this.value, 10);
     state.astro.trails.iss.minutes = minutes;
-    var h = state.astro.trails.iss.history;
-    while (h.length > minutes) h.shift();
+    trimTimed(state.astro.trails.iss.history, minutes * 60000);
     var sp = document.getElementById('val-trail-iss');
     if (sp) sp.textContent = minutes;
   });
@@ -783,6 +825,11 @@ async function init() {
     state.showTropics = e.target.checked;
     renderLines(); renderLabels();
   });
+  document.getElementById('chk-timezones').addEventListener('change', function(e) {
+    state.showTimezones = e.target.checked;   // v6.5.0
+    if (e.target.checked) loadTimezones();
+    renderTimezones(true); renderLabels();
+  });
   document.getElementById('chk-ecliptic').addEventListener('change', function(e) {
     state.showEcliptic = e.target.checked;
     updateAstroTimePanel();   // эклиптике нужна панель времени
@@ -803,6 +850,8 @@ async function init() {
     ['chk-stars',   'showStars'  ],
     ['chk-iss',     'showIss'    ],  // v5.8.0
     ['chk-milkyway','showMilkyWay'], // v5.9.0
+    ['chk-shadow',  'showShadow' ],  // v6.6.0
+    ['chk-nodes',   'showNodes'  ],  // v6.6.0
   ].forEach(function(pair) {
     var el = document.getElementById(pair[0]);
     if (!el) return;
@@ -889,38 +938,29 @@ async function init() {
     setAstroDate(new Date(state.astro.date.getTime() + 86400000), true);
   });
 
-  /* ── Четыре кнопки анимации ──────────────────────────────── */
-  document.getElementById('btn-play-hour').addEventListener('click', function() {
-    astroPlayMode('hour');
+  /* ── Скорость (v6.5.0): ×1 реальная, ×10, ×20, ×100, ползунок ── */
+  SPEED_PRESETS.forEach(function(sp) {
+    var btn = document.getElementById('btn-spd-' + sp);
+    if (!btn) return;
+    btn.addEventListener('click', function() {
+      var on = state.astro.playing && state.astro.playMode === 'speed';
+      if (on && state.astro.speed === sp) { astroPause(); return; }   // тот же — пауза
+      astroSetSpeed(sp, true);
+    });
   });
+  document.getElementById('btn-speed-play').addEventListener('click', function() {
+    astroPlayMode('speed');   // пуск / пауза на текущей скорости
+  });
+  document.getElementById('slider-speed').addEventListener('input', function() {
+    astroSetSpeed(speedFromSlider(parseInt(this.value, 10)), false);
+  });
+
+  /* ── Годовое движение (24ч) и звёздные сутки ─────────────── */
   document.getElementById('btn-play-day').addEventListener('click', function() {
     astroPlayMode('day');
   });
   document.getElementById('btn-play-sidereal').addEventListener('click', function() {
     astroPlayMode('sidereal');
-  });
-  /* МКС — четвёртая кнопка (v5.8.0) */
-  var btnIss = document.getElementById('btn-play-iss');
-  if (btnIss) btnIss.addEventListener('click', function() {
-    astroPlayMode('iss');
-  });
-
-  /* ── Кнопки скорости МКС (v5.8.0) ───────────────────────── */
-  ISS_SPEED_OPTIONS.forEach(function(s) {
-    var btn = document.getElementById('btn-iss-speed-' + s);
-    if (!btn) return;
-    btn.addEventListener('click', function() {
-      state.astro.issSpeed = s;
-      updateIssSpeedButtons();
-    });
-  });
-
-  /* ── Слайдер скорости МКС (v5.8.0) ──────────────────────── */
-  var slIssSpeed = document.getElementById('slider-iss-speed');
-  if (slIssSpeed) slIssSpeed.addEventListener('input', function() {
-    var v = Math.max(1, Math.min(100, parseInt(this.value, 10)));
-    state.astro.issSpeed = v;
-    updateIssSpeedButtons(); // синхронизирует кнопки
   });
 
   /* ── Пресеты координат ───────────────────────────────────── */
@@ -973,8 +1013,22 @@ async function init() {
    СТАТИСТИКА (v6.3.0) — см. analytics/worker.js
 ================================================================ */
 
+/* Свои заходы: откройте сайт с ?me=1 — этот браузер больше не считается,
+   ?me=0 — вернуть подсчёт. Флаг хранится в localStorage (v6.6.0). */
+function meFlag() {
+  try {
+    var m = /[?&]me=([01])(?:&|$)/.exec(location.search);
+    if (m) {
+      if (m[1] === '1') localStorage.setItem('femap_me', '1');
+      else localStorage.removeItem('femap_me');
+    }
+    return localStorage.getItem('femap_me') === '1';
+  } catch (e) { return false; }
+}
+
 function analyticsEnabled() {
   if (!ANALYTICS_URL) return false;
+  if (meFlag()) return false;
   var h = location.hostname;
   if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]' || /^(10|192\.168)\./.test(h) ||
       /^172\.(1[6-9]|2\d|3[01])\./.test(h) || /\.local$/.test(h) || location.protocol === 'file:') return false;

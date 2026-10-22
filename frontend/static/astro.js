@@ -1,6 +1,20 @@
 /**
  * Файл    : frontend/static/astro.js
- * Версия  : 6.4.0
+ * Версия  : 6.6.0
+ *
+ * Изменения 6.6.0:
+ *   - bodySubpoint() теперь геоцентрическая (раньше — топоцентрическая из точки
+ *       0°,0°: у Луны сдвиг до ~1°, что заметно при затмениях)
+ *   - shadowInfo(), nodeSubpoints(), moonOrbitLine(): тень Земли, узлы Луны
+ *   - astroAnyOn() учитывает showShadow и showNodes
+
+ *
+ * Изменения 6.5.0:
+ *   - хвосты по времени: pushTimed(), trimTimed(); точка пишется раз в
+ *       TRAIL_SAMPLE_MS модельного времени + «живая голова» на каждом кадре
+ *   - режим анимации 'speed' (×1 = реальное время, ползунок, пресеты) вместо
+ *       'hour' и 'iss'; astroSetSpeed(), updateSpeedUI(), speedFromSlider()
+
  * Модуль  : Астрономические вычисления и управление временем
  *
  * Изменения 6.4.0:
@@ -194,21 +208,32 @@ function sunSubpoint(date) {
 function bodySubpoint(bodyKey, date) {
   if (!astroOk()) return null;
   try {
-    var body     = Astronomy.Body[bodyKey];
-    if (body === undefined) return null;
-    var aberr    = (bodyKey === 'Sun');
-    var observer = new Astronomy.Observer(0, 0, 0);
-    var eq       = Astronomy.Equator(body, date, observer, true, aberr);
+    var g = geoEquatorOfDate(bodyKey, date);
+    if (!g) return null;
     var gstDeg   = Astronomy.SiderealTime(date) * 15;
-    var ghaDeg   = ((gstDeg - eq.ra * 15) % 360 + 360) % 360;
+    var ghaDeg   = ((gstDeg - g.ra * 15) % 360 + 360) % 360;
     var lon      = -ghaDeg;
     if (lon < -180) lon += 360;
     if (lon >  180) lon -= 360;
-    return { lat: eq.dec, lon: lon };
+    return { lat: g.dec, lon: lon };
   } catch(e) {
     console.error('[astro] bodySubpoint "' + bodyKey + '" ошибка:', e.message || e);
     return null;
   }
+}
+
+/**
+ * Геоцентрические экваториальные координаты тела на эпоху даты (v6.6.0):
+ * ra в часах, dec в градусах, dist — расстояние от центра Земли в км.
+ * Для Солнца учитывается аберрация.
+ */
+function geoEquatorOfDate(bodyKey, date) {
+  var body = Astronomy.Body[bodyKey];
+  if (body === undefined) return null;
+  var v   = Astronomy.GeoVector(body, date, bodyKey === 'Sun');
+  var rot = Astronomy.Rotation_EQJ_EQD(date);
+  var eq  = Astronomy.EquatorFromVector(Astronomy.RotateVector(rot, v));
+  return { ra: eq.ra, dec: eq.dec, dist: v.Length() * AU_KM };
 }
 
 /**
@@ -510,60 +535,62 @@ function initStarTrails() {
 }
 
 /**
+ * Запись точки хвоста по времени (v6.5.0).
+ * Элемент истории: [lon, lat, t] — зафиксированная точка, [lon, lat, t, 1] —
+ * «живая голова» (текущее положение; на каждом кадре заменяется). Новая
+ * зафиксированная точка пишется не чаще чем раз в sampleMs модельного
+ * времени, старше lenMs отбрасывается — длина хвоста не зависит от скорости.
+ * Если время пошло назад — история сбрасывается.
+ */
+function pushTimed(h, lon, lat, t, sampleMs, lenMs) {
+  var n = h.length;
+  if (n && h[n - 1][3]) { h.pop(); n--; }
+  if (n && t < h[n - 1][2]) { h.length = 0; n = 0; }
+  if (n === 0 || t - h[n - 1][2] >= sampleMs) h.push([lon, lat, t]);
+  h.push([lon, lat, t, 1]);
+  var cut = t - lenMs;
+  while (h.length > 2 && h[1][2] < cut) h.shift();
+}
+
+/** Обрезает историю до lenMs от последней точки (при смене длины хвоста). */
+function trimTimed(h, lenMs) {
+  if (!h || !h.length) return;
+  var cut = h[h.length - 1][2] - lenMs;
+  while (h.length > 2 && h[1][2] < cut) h.shift();
+}
+
+/**
  * Добавляет точку [lon, lat] в history объекта (Солнце или Луна).
  * @param {'sun'|'moon'} key
- * @param {number} lon
- * @param {number} lat
  */
 function appendTrailPoint(key, lon, lat) {
   var trail = state.astro.trails[key];
   if (!trail) return;
-  var maxPts;
-  if (key === 'sun')  maxPts = trail.days * 24;
-  if (key === 'moon') maxPts = trail.days * 24;
-  trail.history.push([lon, lat]);
-  if (trail.history.length > maxPts) trail.history.shift();
+  pushTimed(trail.history, lon, lat, state.astro.date.getTime(),
+            TRAIL_SAMPLE_MS.sunMoon, trail.days * 86400000);
 }
 
-/**
- * Добавляет точку в историю конкретной звезды.
- * @param {number} idx
- * @param {number} lon
- * @param {number} lat
- */
+/** Добавляет точку в историю конкретной звезды. */
 function appendStarTrailPoint(idx, lon, lat) {
   var trail = state.astro.trails.stars;
   if (!trail.history[idx]) return;
-  var maxPts = trail.hours;
-  trail.history[idx].push([lon, lat]);
-  if (trail.history[idx].length > maxPts) trail.history[idx].shift();
+  pushTimed(trail.history[idx], lon, lat, state.astro.date.getTime(),
+            TRAIL_SAMPLE_MS.stars, trail.hours * 3600000);
 }
 
-/**
- * Добавляет точку в историю конкретной планеты. (v5.7.0)
- * @param {string} key
- * @param {number} lon
- * @param {number} lat
- */
+/** Добавляет точку в историю конкретной планеты. (v5.7.0) */
 function appendPlanetTrailPoint(key, lon, lat) {
   var trail = state.astro.trails.planets;
   if (!trail.history[key]) trail.history[key] = [];
-  var maxPts = trail.days * 24;
-  trail.history[key].push([lon, lat]);
-  if (trail.history[key].length > maxPts) trail.history[key].shift();
+  pushTimed(trail.history[key], lon, lat, state.astro.date.getTime(),
+            TRAIL_SAMPLE_MS.planets, trail.days * 86400000);
 }
 
-/**
- * Добавляет точку в историю хвоста МКС. (v5.8.0)
- * maxPoints = trails.iss.minutes (шаг 1 мин → 1 точка на минуту).
- * @param {number} lon
- * @param {number} lat
- */
+/** Добавляет точку в историю хвоста МКС. (v5.8.0) */
 function appendIssTrailPoint(lon, lat) {
   var trail = state.astro.trails.iss;
-  var maxPts = trail.minutes; // одна точка на минуту → maxPoints = minutes
-  trail.history.push([lon, lat]);
-  if (trail.history.length > maxPts) trail.history.shift();
+  pushTimed(trail.history, lon, lat, state.astro.date.getTime(),
+            TRAIL_SAMPLE_MS.iss, trail.minutes * 60000);
 }
 
 /**
@@ -743,7 +770,10 @@ function setAstroDate(date, manual) {
 
 /**
  * Запускает или переключает режим анимации.
- * @param {'hour'|'day'|'sidereal'|'iss'} mode
+ * @param {'speed'|'day'|'sidereal'} mode
+ *   speed    — реальное время × state.astro.speed (1 с = speed с)
+ *   day      — шаг 1 сутки на кадр (годовое движение)
+ *   sidereal — шаг 23ч 56м 4с на кадр (звёздные сутки)
  */
 function astroPlayMode(mode) {
   /* Если тот же режим уже играет — пауза */
@@ -757,11 +787,16 @@ function astroPlayMode(mode) {
   state.astro.playMode = mode;
   updatePlayButtons();
 
+  var last = performance.now();
   state.astro.timer = setInterval(function() {
+    var now = performance.now();
+    var dt  = now - last;
+    last = now;
     var stepMs;
-    if (state.astro.playMode === 'iss') {
-      /* Шаг пересчитывается каждый тик — позволяет менять скорость на ходу */
-      stepMs = 60 * 1000 * state.astro.issSpeed;
+    if (state.astro.playMode === 'speed') {
+      /* Реальное прошедшее время × скорость: ×1 = реальное время.
+         Скорость читается каждый кадр — меняется на ходу. */
+      stepMs = dt * state.astro.speed;
     } else {
       stepMs = ANIM_STEP[state.astro.playMode];
     }
@@ -779,87 +814,191 @@ function astroPause() {
   updatePlayButtons();
 }
 
+/** Ползунок (0..1000, логарифмический) → скорость 1..SPEED_MAX. */
+function speedFromSlider(p) {
+  return Math.max(1, Math.min(SPEED_MAX, Math.round(Math.pow(SPEED_MAX, p / 1000))));
+}
+
+/** Скорость → положение ползунка. */
+function sliderFromSpeed(v) {
+  return Math.round(1000 * Math.log(Math.max(1, v)) / Math.log(SPEED_MAX));
+}
+
 /**
- * Обновляет внешний вид кнопок Play/Pause, подсказку режима,
- * видимость блока iss-speed-btns и кнопок скорости. (v5.8.0)
+ * Устанавливает скорость; startPlay — запустить, если не играет в режиме speed.
+ */
+function astroSetSpeed(v, startPlay) {
+  state.astro.speed = Math.max(1, Math.min(SPEED_MAX, v));
+  if (startPlay && !(state.astro.playing && state.astro.playMode === 'speed')) {
+    astroPlayMode('speed');   // внутри вызовет updatePlayButtons()
+    return;
+  }
+  updatePlayButtons();
+}
+
+/** «1 с = 5 мин» — что означает текущая скорость. */
+function speedEquiv(v) {
+  var L = LANG[state.lang];
+  var r = function(x) { return Math.round(x * 10) / 10; };
+  if (v < 120)    return r(v) + ' ' + L.unitSec;
+  if (v < 7200)   return r(v / 60) + ' ' + L.unitMin;
+  if (v < 172800) return r(v / 3600) + ' ' + L.unitHour;
+  return r(v / 86400) + ' ' + L.unitDay;
+}
+
+/**
+ * Обновляет кнопки скорости, ползунок, подписи, кнопки день/звёздные сутки
+ * и подсказку режима.
  */
 function updatePlayButtons() {
-  var lang = state.lang;
+  var L = LANG[state.lang];
+  var playing = state.astro.playing;
+  var mode    = state.astro.playMode;
+  var speedOn = playing && mode === 'speed';
 
-  /* ── Кнопки hour / day / sidereal ──────────────────────── */
-  var btnIds = {
-    hour:     'btn-play-hour',
-    day:      'btn-play-day',
-    sidereal: 'btn-play-sidereal',
-    iss:      'btn-play-iss',
-  };
+  /* ── Кнопки скорости ×1 / ×10 / ×20 / ×100 ───────────────── */
+  SPEED_PRESETS.forEach(function(sp) {
+    var btn = document.getElementById('btn-spd-' + sp);
+    if (!btn) return;
+    var sel = (state.astro.speed === sp);
+    btn.textContent = (speedOn && sel ? '⏸ ' : '▶ ') + (sp === 1 ? L.speedReal : '×' + sp);
+    btn.style.background  = (speedOn && sel) ? '#1a5a8a' : '';
+    btn.style.borderColor = sel ? '#3ab4ff' : '';
+  });
+  var bp = document.getElementById('btn-speed-play');
+  if (bp) {
+    bp.textContent = speedOn ? '⏸' : '▶';
+    bp.style.background = speedOn ? '#1a5a8a' : '';
+  }
+  var sl = document.getElementById('slider-speed');
+  if (sl) sl.value = sliderFromSpeed(state.astro.speed);
+  var ro = document.getElementById('speed-readout');
+  if (ro) ro.textContent = '×' + state.astro.speed + '  ·  ' + L.oneSec + ' = ' + speedEquiv(state.astro.speed);
+
+  /* ── Кнопки «год» (24ч) и звёздные сутки ─────────────────── */
+  var btnIds = { day: 'btn-play-day', sidereal: 'btn-play-sidereal' };
   var labels = {
-    hour:     { ru:'▶ 1ч',    en:'▶ 1h',    de:'▶ 1h'    },
-    day:      { ru:'▶ 24ч',   en:'▶ 24h',   de:'▶ 24h'   },
-    sidereal: { ru:'▶ ☆сут',  en:'▶ ☆sid',  de:'▶ ☆sid'  },
-    iss:      { ru:'▶ МКС',   en:'▶ ISS',   de:'▶ ISS'   },
+    day:      { ru:'24ч',   en:'24h',   de:'24h'   },
+    sidereal: { ru:'☆сут',  en:'☆sid',  de:'☆sid'  }
   };
-  var pauseLabels = {
-    hour:     { ru:'⏸ 1ч',    en:'⏸ 1h',    de:'⏸ 1h'    },
-    day:      { ru:'⏸ 24ч',   en:'⏸ 24h',   de:'⏸ 24h'   },
-    sidereal: { ru:'⏸ ☆сут',  en:'⏸ ☆sid',  de:'⏸ ☆sid'  },
-    iss:      { ru:'⏸ МКС',   en:'⏸ ISS',   de:'⏸ ISS'   },
-  };
-
-  ['hour','day','sidereal','iss'].forEach(function(m) {
+  ['day', 'sidereal'].forEach(function(m) {
     var btn = document.getElementById(btnIds[m]);
     if (!btn) return;
-    var active = state.astro.playing && state.astro.playMode === m;
-    btn.textContent       = active ? pauseLabels[m][lang] : labels[m][lang];
+    var active = playing && mode === m;
+    btn.textContent       = (active ? '⏸ ' : '▶ ') + labels[m][state.lang];
     btn.style.background  = active ? '#1a5a8a' : '';
     btn.style.borderColor = active ? '#3ab4ff' : '';
   });
 
-  /* ── Подсказка режима ─────────────────────────────────── */
+  /* ── Подсказка режима ─────────────────────────────────────── */
   var hint = document.getElementById('astro-mode-hint');
   if (hint) {
-    if (state.astro.playing && state.astro.playMode) {
-      var modeKeyMap = {
-        hour:     'modeHour',
-        day:      'modeDay',
-        sidereal: 'modeSidereal',
-        iss:      'modeIss',
-      };
-      hint.textContent = LANG[lang][modeKeyMap[state.astro.playMode]] || '';
-    } else {
-      hint.textContent = '';
-    }
+    if (playing && mode === 'day')            hint.textContent = L.modeDay || '';
+    else if (playing && mode === 'sidereal')  hint.textContent = L.modeSidereal || '';
+    else                                      hint.textContent = '';
   }
+}
 
-  /* ── Блок кнопок скорости МКС — виден только при mode=iss ── */
-  var speedBtns = document.getElementById('iss-speed-btns');
-  if (speedBtns) {
-    var issActive = state.astro.playing && state.astro.playMode === 'iss';
-    speedBtns.style.display = issActive ? 'flex' : 'none';
+/* ═══════════════════════════════════════════════════════════════
+   ТЕНЬ ЗЕМЛИ И УЗЛЫ ЛУНЫ (v6.6.0)
+═══════════════════════════════════════════════════════════════ */
+
+function angDistDeg(a, b) {
+  var D = Math.PI / 180;
+  var c = Math.sin(a.lat * D) * Math.sin(b.lat * D) +
+          Math.cos(a.lat * D) * Math.cos(b.lat * D) * Math.cos((a.lon - b.lon) * D);
+  return Math.acos(Math.max(-1, Math.min(1, c))) / D;
+}
+
+function wrapLon(l) { return ((l + 540) % 360) - 180; }
+
+/**
+ * Тень Земли на расстоянии Луны: центр — точка, противоположная Солнцу
+ * (антипод субсолярной точки), радиусы умбры и пенумбры в градусах.
+ * Расстояние «центр → Луна» и фазы умбры/пенумбры считаются так же, как в
+ * каталогах затмений: (r + s☾ − расстояние) / (2 · s☾).
+ * @returns {{lon,lat,umbra,penumbra,sep,moonR,magU,magP}|null}
+ */
+function shadowInfo(date) {
+  if (!astroOk()) return null;
+  try {
+    var D  = 180 / Math.PI;
+    var sg = geoEquatorOfDate('Sun', date);
+    var mg = geoEquatorOfDate('Moon', date);
+    var sp = bodySubpoint('Sun', date), mp = bodySubpoint('Moon', date);
+    if (!sg || !mg || !sp || !mp) return null;
+    var center = { lon: wrapLon(sp.lon + 180), lat: -sp.lat };
+    var piM = Math.asin(EARTH_R_KM / mg.dist) * D;
+    var piS = Math.asin(EARTH_R_KM / sg.dist) * D;
+    var sS  = Math.asin(SUN_R_KM   / sg.dist) * D;
+    var sM  = Math.asin(MOON_R_KM  / mg.dist) * D;
+    var umbra    = SHADOW_ENLARGE * (piM + piS - sS);
+    var penumbra = SHADOW_ENLARGE * (piM + piS + sS);
+    var sep = angDistDeg(mp, center);
+    return {
+      lon: center.lon, lat: center.lat,
+      umbra: umbra, penumbra: penumbra, sep: sep, moonR: sM,
+      magU: (umbra + sM - sep) / (2 * sM),
+      magP: (penumbra + sM - sep) / (2 * sM)
+    };
+  } catch (e) {
+    console.error('[astro] shadowInfo:', e.message || e);
+    return null;
   }
+}
 
-  /* ── Подсветка активной кнопки скорости и синхронизация слайдера ── */
-  updateIssSpeedButtons();
+/** Юлианская дата. */
+function julianDayOf(date) { return date.getTime() / 86400000 + 2440587.5; }
+
+/** Средняя долгота восходящего узла лунной орбиты, ° (Meeus). */
+function meanNodeLon(date) {
+  var T = (julianDayOf(date) - 2451545.0) / 36525;
+  var om = 125.04452 - 1934.136261 * T + 0.0020708 * T * T + T * T * T / 450000;
+  return ((om % 360) + 360) % 360;
 }
 
 /**
- * Подсвечивает кнопку скорости МКС, соответствующую state.astro.issSpeed,
- * и синхронизирует слайдер slider-iss-speed. (v5.8.0)
+ * Эклиптическая точка (λ, β) на эпоху даты → подточка на Земле.
+ * Средняя эклиптика даты, без нутации (разница ~0.005°).
  */
-function updateIssSpeedButtons() {
-  ISS_SPEED_OPTIONS.forEach(function(s) {
-    var btn = document.getElementById('btn-iss-speed-' + s);
-    if (!btn) return;
-    var active = (state.astro.issSpeed === s);
-    btn.style.background  = active ? '#1a5a8a' : '';
-    btn.style.borderColor = active ? '#00ff88' : '';
-    btn.style.color       = active ? '#00ff88' : '';
-  });
-  var slider = document.getElementById('slider-iss-speed');
-  if (slider) {
-    /* Слайдер min=1 max=100; значения выше 100 (нет в ISS_SPEED_OPTIONS) не страшны */
-    slider.value = Math.min(100, state.astro.issSpeed);
+function eclipticToSubpoint(lamDeg, betaDeg, date) {
+  var R = Math.PI / 180;
+  var T = (julianDayOf(date) - 2451545.0) / 36525;
+  var eps = (23.4392911 - 0.0130042 * T) * R;
+  var l = lamDeg * R, b = betaDeg * R;
+  var x = Math.cos(b) * Math.cos(l);
+  var y = Math.cos(b) * Math.sin(l) * Math.cos(eps) - Math.sin(b) * Math.sin(eps);
+  var z = Math.cos(b) * Math.sin(l) * Math.sin(eps) + Math.sin(b) * Math.cos(eps);
+  var raDeg = Math.atan2(y, x) / R;
+  var dec   = Math.asin(z) / R;
+  var gst   = gstHours(date) * 15;
+  return { lon: wrapLon(raDeg - gst), lat: dec };
+}
+
+/** Раху — восходящий узел, Кету — нисходящий (средние). */
+function nodeSubpoints(date) {
+  var om = meanNodeLon(date);
+  return {
+    om:   om,
+    rahu: eclipticToSubpoint(om, 0, date),
+    ketu: eclipticToSubpoint(om + 180, 0, date)
+  };
+}
+
+/** Орбита Луны (большой круг, наклон MOON_INCL к эклиптике) как массив [lon,lat]. */
+function moonOrbitLine(date) {
+  var R = Math.PI / 180;
+  var om = meanNodeLon(date);
+  var inc = MOON_INCL * R;
+  var out = [];
+  for (var u = 0; u <= 360; u += 2) {
+    var ur = u * R;
+    var lam = om + Math.atan2(Math.cos(inc) * Math.sin(ur), Math.cos(ur)) / R;
+    var beta = Math.asin(Math.sin(inc) * Math.sin(ur)) / R;
+    var p = eclipticToSubpoint(lam, beta, date);
+    out.push([p.lon, p.lat]);
   }
+  return out;
 }
 
 /**
@@ -870,7 +1009,8 @@ function astroAnyOn() {
          state.astro.showMoon   || state.astro.showPlanets ||
          state.astro.showStars  || state.astro.showIss  ||  // v5.8.0
          state.astro.showMilkyWay ||                        // v5.9.0
-         state.astro.showZodiac   || state.showEcliptic;    // v6.0.0
+         state.astro.showZodiac   || state.showEcliptic ||  // v6.0.0
+         state.astro.showShadow   || state.astro.showNodes;  // v6.6.0
 }
 
 /**

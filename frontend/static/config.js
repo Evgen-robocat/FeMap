@@ -1,6 +1,25 @@
 /**
  * Файл    : frontend/static/config.js
- * Версия  : 6.4.2
+ * Версия  : 6.7.0
+ *
+ * Изменения 6.7.0:
+ *   - часовые пояса: реальные границы (timezone-boundary-builder 2026e, ODbL);
+ *       TZ_URL; цвет по фактическому смещению UTC на выбранную дату (DST)
+
+ *
+ * Изменения 6.6.0:
+ *   - тень Земли (умбра/пенумбра) и узлы Луны (Раху/Кету): константы
+ *       EARTH_R_KM, SUN_R_KM, MOON_R_KM, AU_KM, SHADOW_ENLARGE, MOON_INCL;
+ *       LANG: shadowChk, nodesChk, shadowName, ...
+
+ *
+ * Изменения 6.5.0:
+ *   - часовые пояса: TZ_COLORS, TZ_OPACITY; LANG: tzChk, secDiurnal, secYearly,
+ *       speedReal*, unit*, oneSec, modeSpeed
+ *   - скорость анимации: SPEED_MAX, ISS_SPEED_OPTIONS заменён на SPEED_PRESETS;
+ *       ×1 — реальное время (1 с = 1 с), режим 'speed' вместо 'hour' и 'iss'
+ *   - хвосты считаются по времени: TRAIL_SAMPLE_MS (шаг записи точек)
+
  *
  * Изменения 6.4.2:
  *   - ANALYTICS_URL указывает на Worker статистики (femap-stats.femap-lab.workers.dev)
@@ -82,7 +101,7 @@
 
 'use strict';
 
-var VERSION = window.FEMAP_VERSION || '6.4.2';
+var VERSION = window.FEMAP_VERSION || '6.7.0';
 
 /* ═══════════════════════════════════════════════════════════════
    ЦВЕТА
@@ -297,6 +316,17 @@ var LANG = {
     eclNotFound:'Затмение не найдено', eclNeedLib:'Нужна библиотека astronomy-engine',
     errLoad:'Ошибка загрузки', errMilky:'Ошибка загрузки Млечного Пути',
     errZodiac:'Ошибка загрузки зодиака',
+    tzChk:'Часовые пояса',                                                  // v6.5.0
+    secDiurnal:'Суточное движение', secYearly:'Годовое движение · звёздные сутки',
+    speedReal:'×1 реально', speedRealTitle:'Реальная скорость: 1 с = 1 с',
+    speedPlayTitle:'Пуск / пауза', speedSliderTitle:'Скорость анимации',
+    unitSec:'с', unitMin:'мин', unitHour:'ч', unitDay:'сут', oneSec:'1 с',
+    modeSpeed:'скорость',
+    tzLoading:'Загрузка часовых поясов…', errTz:'Ошибка загрузки часовых поясов',
+    shadowChk:'🌑 Чёрное солнце (Умбра / Пенумбра)', nodesChk:'☊☋ Узлы Луны (Раху / Кету)',   // v6.6.0
+    shadowName:'Чёрное солнце', shadowUmbra:'умбра', shadowPenumbra:'пенумбра',
+    shadowCenterMoon:'центр→Луна', inUmbra:'Луна в тени, фаза', inPenumbra:'Луна в полутени, фаза',
+    rahu:'Раху', ketu:'Кету', meanNodeNote:'средний узел',
   },
   en: {
     latLabel:'Center Latitude', lonLabel:'Center Longitude',
@@ -354,6 +384,17 @@ var LANG = {
     eclNotFound:'No eclipse found', eclNeedLib:'astronomy-engine library is required',
     errLoad:'Load error', errMilky:'Milky Way load error',
     errZodiac:'Zodiac load error',
+    tzChk:'Time zones',                                                     // v6.5.0
+    secDiurnal:'Daily motion', secYearly:'Yearly motion · sidereal day',
+    speedReal:'×1 real time', speedRealTitle:'Real speed: 1 s = 1 s',
+    speedPlayTitle:'Play / pause', speedSliderTitle:'Animation speed',
+    unitSec:'s', unitMin:'min', unitHour:'h', unitDay:'d', oneSec:'1 s',
+    modeSpeed:'speed',
+    tzLoading:'Loading time zones…', errTz:'Time zone load error',
+    shadowChk:'🌑 Black Sun (Umbra / Penumbra)', nodesChk:'☊☋ Lunar nodes (Rahu / Ketu)',   // v6.6.0
+    shadowName:'Black Sun', shadowUmbra:'umbra', shadowPenumbra:'penumbra',
+    shadowCenterMoon:'centre→Moon', inUmbra:'Moon in umbra, mag.', inPenumbra:'Moon in penumbra, mag.',
+    rahu:'Rahu', ketu:'Ketu', meanNodeNote:'mean node',
   },
   de: {
     latLabel:'Breite Mittelpunkt', lonLabel:'Länge Mittelpunkt',
@@ -411,6 +452,17 @@ var LANG = {
     eclNotFound:'Keine Finsternis gefunden', eclNeedLib:'Bibliothek astronomy-engine erforderlich',
     errLoad:'Ladefehler', errMilky:'Fehler beim Laden der Milchstraße',
     errZodiac:'Fehler beim Laden des Tierkreises',
+    tzChk:'Zeitzonen',                                                      // v6.5.0
+    secDiurnal:'Tagesbewegung', secYearly:'Jahresbewegung · Sternentag',
+    speedReal:'×1 Echtzeit', speedRealTitle:'Echte Geschwindigkeit: 1 s = 1 s',
+    speedPlayTitle:'Start / Pause', speedSliderTitle:'Animationstempo',
+    unitSec:'s', unitMin:'Min', unitHour:'Std', unitDay:'Tg', oneSec:'1 s',
+    modeSpeed:'Tempo',
+    tzLoading:'Zeitzonen werden geladen…', errTz:'Fehler beim Laden der Zeitzonen',
+    shadowChk:'🌑 Schwarze Sonne (Umbra / Penumbra)', nodesChk:'☊☋ Mondknoten (Rahu / Ketu)',   // v6.6.0
+    shadowName:'Schwarze Sonne', shadowUmbra:'Kernschatten', shadowPenumbra:'Halbschatten',
+    shadowCenterMoon:'Zentrum→Mond', inUmbra:'Mond im Kernschatten, Mag.', inPenumbra:'Mond im Halbschatten, Mag.',
+    rahu:'Rahu', ketu:'Ketu', meanNodeNote:'mittlerer Knoten',
   },
 };
 
@@ -586,7 +638,7 @@ var ANIM_STEP = {
   day:      24 * 60 * 60 * 1000, // 1 сутки
   sidereal: 86164 * 1000,        // 23ч 56м 4с — звёздные сутки
   // Режим 'iss' не имеет фиксированного шага — рассчитывается как
-  // 60 * 1000 * state.astro.issSpeed при каждом тике (astro.js)
+  // dt * state.astro.speed при каждом тике (astro.js, режим speed)
 };
 
 /* Интервал между кадрами анимации (мс) */
@@ -608,7 +660,35 @@ var ISS_TLE_FALLBACK = [
 
 /* Варианты множителя скорости для кнопок ×N в режиме 'iss'.
    Каждый множитель = реальных минут за один кадр анимации (80мс). */
-var ISS_SPEED_OPTIONS = [1, 10, 20, 100];
+/* Скорость анимации (v6.5.0): множитель реального времени.
+   ×1 — реальная скорость (1 с модели = 1 с). Ползунок логарифмический. */
+var SPEED_PRESETS = [1, 10, 20, 100];
+var SPEED_MAX     = 50000;
+
+/* Хвосты (v6.5.0): точки пишутся не чаще чем раз в TRAIL_SAMPLE_MS модельного
+   времени, поэтому длина хвоста в днях/часах/минутах не зависит от скорости */
+var TRAIL_SAMPLE_MS = { sunMoon: 3600000, planets: 3600000, stars: 3600000, iss: 60000 };
+
+/* Часовые пояса (v6.5.0): 25 полос по 15° (UTC-12 … UTC+12), 7 цветов по кругу */
+var TZ_COLORS  = ['#ff5d5d', '#ffa84d', '#ffe14d', '#6bd96b', '#4dc9ff', '#6b7bff', '#c06bff'];
+var TZ_OPACITY = 0.30;
+
+/* Реальные границы часовых поясов (v6.7.0): timezone-boundary-builder 2026e,
+   упрощено; см. data/LICENSE-timezones.txt (ODbL, © OpenStreetMap contributors) */
+var TZ_URL = '/data/timezones.json?v=670';
+
+/* Тень Земли и узлы Луны (v6.6.0). Радиусы тени на расстоянии Луны:
+     умбра     = 1.02 · (π☾ + π☉ − s☉)
+     пенумбра  = 1.02 · (π☾ + π☉ + s☉)
+   π — горизонтальный параллакс, s☉ — угловой радиус Солнца, 1.02 — обычная
+   поправка на атмосферу Земли (Данжон). Проверка по затмениям 2025–2026:
+   фаза умбры совпадает с каталожной в пределах ~0.01. */
+var EARTH_R_KM = 6378.137;
+var SUN_R_KM   = 695700;
+var MOON_R_KM  = 1737.4;
+var AU_KM      = 149597870.7;
+var SHADOW_ENLARGE = 1.02;
+var MOON_INCL  = 5.145;      // наклон орбиты Луны к эклиптике, °
 
 /* ── Хвосты объектов (v5.6.0) ───────────────────────────────────
    TRAIL_BANDS — количество полос градиентной прозрачности.

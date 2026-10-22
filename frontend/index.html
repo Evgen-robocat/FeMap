@@ -2,7 +2,7 @@
 <!--
   Файл    : frontend/index.html
   Версия  : 1.15.0 (HTML_V=18)
-  Изменения 6.4.0: cache-bust ?v=642 — язык выпадающим списком (#lang-select);
+  Изменения 6.4.0: cache-bust ?v=670 — язык выпадающим списком (#lang-select);
                    data-i18n на всех надписях панели (+ data-i18n-title);
                    блок #coords-details (координаты тел); календарь
                    #inp-astro-datetime и кнопки затмений в панели времени
@@ -25,7 +25,7 @@
                    (после «Звёзды»), данные /data/milkyway.json грузятся
                    лениво при первом включении
   Изменения 5.8.0: cache-bust ?v=580 — МКС трекинг, satellite.js 4.1.3,
-                   chk-iss, btn-play-iss, iss-speed-btns, slider-iss-speed,
+                   chk-iss, btn-spd-*, btn-speed-play, slider-speed,
                    iss-tooltip
 -->
 <html lang="ru">
@@ -35,7 +35,7 @@
   <title>FlatEarthMap</title>
 
   <!-- 1. Стили — первыми чтобы не было мигания -->
-  <link rel="stylesheet" href="/static/style.css?v=642">
+  <link rel="stylesheet" href="/static/style.css?v=670">
 
   <!-- 2. D3.js v7 — до всех map-скриптов, они зависят от d3.* -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
@@ -50,11 +50,11 @@
   <!-- 5. Модули карты — строго в этом порядке:
        config → state → astro → render → main
        Каждый следующий видит глобальные переменные предыдущего -->
-  <script src="/static/config.js?v=642"></script>
-  <script src="/static/state.js?v=642"></script>
-  <script src="/static/astro.js?v=642"></script>
-  <script src="/static/render.js?v=642"></script>
-  <script src="/static/main.js?v=642"></script>
+  <script src="/static/config.js?v=671"></script>
+  <script src="/static/state.js?v=670"></script>
+  <script src="/static/astro.js?v=670"></script>
+  <script src="/static/render.js?v=670"></script>
+  <script src="/static/main.js?v=670"></script>
 
 </head>
 <body>
@@ -140,6 +140,11 @@
         <span class="checkbox-custom"></span>
         <span data-i18n="eclipticChk">Эклиптика</span>
       </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-timezones">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="tzChk">Часовые пояса</span>
+      </label>
     </div>
 
     <!-- Чекбоксы астрономии -->
@@ -159,6 +164,17 @@
         <input type="checkbox" id="chk-moon">
         <span class="checkbox-custom"></span>
         <span data-i18n="moonChk">🌙 Луна</span>
+      </label>
+      <!-- v6.6.0: тень Земли (умбра/пенумбра) и узлы Луны (Раху/Кету) -->
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-shadow">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="shadowChk">🌑 Чёрное солнце (Умбра / Пенумбра)</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-nodes">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="nodesChk">☊☋ Узлы Луны (Раху / Кету)</span>
       </label>
       <label class="checkbox-label">
         <input type="checkbox" id="chk-planets">
@@ -236,6 +252,8 @@
       </div>
       <div id="ecl-info" style="font-family:monospace; font-size:10px; color:#c8d8f0;
            text-align:center; min-height:12px; margin-bottom:6px;"></div>
+      <div id="shadow-info" style="font-family:monospace; font-size:10px; color:#c8b8f0;
+           text-align:center; white-space:pre-line; margin-bottom:6px;"></div>
 
       <!-- Годовой ползунок (шаг 1 сутки) -->
       <div style="display:flex; align-items:center; gap:4px; margin-bottom:3px;">
@@ -260,42 +278,42 @@
         <button id="btn-astro-next" class="btn-preset" style="flex:1;padding:5px 2px;" data-i18n="nextDay">День →</button>
       </div>
 
-      <!-- Четыре кнопки анимации — v5.8.0: добавлена ▶ МКС -->
+      <!-- Суточное движение (v6.5.0): реальная скорость ×1, ×10, ×20, ×100 + ползунок.
+           Тексты кнопок ставит updatePlayButtons() -->
+      <div data-i18n="secDiurnal"
+           style="font-size:10px; color:#7fb2d4; margin:6px 0 3px;">Суточное движение</div>
+      <div style="display:flex; gap:4px; margin-bottom:4px;">
+        <button id="btn-spd-1"   class="btn-preset" data-i18n-title="speedRealTitle"
+                title="Реальная скорость: 1 с = 1 с"
+                style="flex:1.7; padding:5px 2px; font-size:10px;">▶ ×1</button>
+        <button id="btn-spd-10"  class="btn-preset"
+                style="flex:1; padding:5px 2px; font-size:10px;">▶ ×10</button>
+        <button id="btn-spd-20"  class="btn-preset"
+                style="flex:1; padding:5px 2px; font-size:10px;">▶ ×20</button>
+        <button id="btn-spd-100" class="btn-preset"
+                style="flex:1; padding:5px 2px; font-size:10px;">▶ ×100</button>
+      </div>
+      <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
+        <button id="btn-speed-play" class="btn-preset" data-i18n-title="speedPlayTitle"
+                title="Пуск / пауза" style="padding:4px 9px; font-size:11px;">▶</button>
+        <input type="range" id="slider-speed" min="0" max="1000" value="0" step="1"
+               data-i18n-title="speedSliderTitle" title="Скорость анимации"
+               style="flex:1; accent-color:#3ab4ff;">
+      </div>
+      <div id="speed-readout"
+           style="font-size:9px; color:#5a8a9a; text-align:center; min-height:12px;
+                  font-family:monospace; margin-bottom:4px;"></div>
+
+      <!-- Годовое движение и звёздные сутки: шаг на кадр -->
+      <div data-i18n="secYearly"
+           style="font-size:10px; color:#7fb2d4; margin:6px 0 3px;">Годовое движение · звёздные сутки</div>
       <div style="display:flex; gap:5px; margin-bottom:4px;">
-        <button id="btn-play-hour"     class="btn-preset"
-                style="flex:1; padding:5px 2px; font-size:10px;"
-                data-i18n-title="playHourTitle" title="Суточная анимация: шаг 1 час">▶ 1ч</button>
         <button id="btn-play-day"      class="btn-preset"
                 style="flex:1; padding:5px 2px; font-size:10px;"
                 data-i18n-title="playDayTitle" title="Годовая анимация: шаг 1 сутки">▶ 24ч</button>
         <button id="btn-play-sidereal" class="btn-preset"
                 style="flex:1; padding:5px 2px; font-size:10px;"
                 data-i18n-title="playSidTitle" title="Звёздные сутки: шаг 23ч 56м 4с">▶ ☆сут</button>
-        <button id="btn-play-iss"      class="btn-preset"
-                style="flex:1; padding:5px 2px; font-size:10px; color:#00ff88;"
-                data-i18n-title="playIssTitle" title="МКС: шаг 1 мин × скорость">▶ МКС</button>
-      </div>
-
-      <!-- Блок скорости МКС — виден только при mode=iss (v5.8.0)
-           display:none при инициализации; управляется из updatePlayButtons() -->
-      <div id="iss-speed-btns"
-           style="display:none; flex-wrap:wrap; gap:4px; margin-bottom:4px;">
-        <!-- Кнопки ×N: id=btn-iss-speed-{N}, N из ISS_SPEED_OPTIONS -->
-        <button id="btn-iss-speed-1"   class="btn-preset"
-                style="flex:1; padding:4px 2px; font-size:10px; min-width:34px;">×1</button>
-        <button id="btn-iss-speed-10"  class="btn-preset"
-                style="flex:1; padding:4px 2px; font-size:10px; min-width:34px;">×10</button>
-        <button id="btn-iss-speed-20"  class="btn-preset"
-                style="flex:1; padding:4px 2px; font-size:10px; min-width:34px;">×20</button>
-        <button id="btn-iss-speed-100" class="btn-preset"
-                style="flex:1; padding:4px 2px; font-size:10px; min-width:34px;">×100</button>
-        <!-- Непрерывный слайдер скорости 1..100; синхронизирован с кнопками -->
-        <div style="width:100%; display:flex; align-items:center; gap:4px;">
-          <span style="font-size:9px; color:#00ff88; min-width:28px;" data-i18n="speedLbl">×скор</span>
-          <input type="range" id="slider-iss-speed"
-                 min="1" max="100" value="1" step="1"
-                 style="flex:1; accent-color:#00ff88;">
-        </div>
       </div>
 
       <!-- Созвездия, в которых находятся показанные тела (v6.0.0);
