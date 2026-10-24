@@ -337,3 +337,12 @@ input[type="text"] {
     padding: 12px;
   }
 }
+
+/* v7.1.1: неподвижная верхняя панель событий */
+#top-info {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  display: none; z-index: 5; pointer-events: none;
+  max-width: 70%; padding: 4px 12px; text-align: center; white-space: pre-line;
+  font: 11px/1.4 monospace; color: #cfe6ff;
+  background: rgba(8,16,26,0.78); border: 1px solid #2a4a66; border-radius: 8px;
+}

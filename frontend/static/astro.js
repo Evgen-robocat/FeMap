@@ -542,12 +542,12 @@ function initStarTrails() {
  * времени, старше lenMs отбрасывается — длина хвоста не зависит от скорости.
  * Если время пошло назад — история сбрасывается.
  */
-function pushTimed(h, lon, lat, t, sampleMs, lenMs) {
+function pushTimed(h, lon, lat, t, sampleMs, lenMs, extra) {
   var n = h.length;
   if (n && h[n - 1][3]) { h.pop(); n--; }
   if (n && t < h[n - 1][2]) { h.length = 0; n = 0; }
-  if (n === 0 || t - h[n - 1][2] >= sampleMs) h.push([lon, lat, t]);
-  h.push([lon, lat, t, 1]);
+  if (n === 0 || t - h[n - 1][2] >= sampleMs) h.push([lon, lat, t, 0, extra]);
+  h.push([lon, lat, t, 1, extra]);
   var cut = t - lenMs;
   while (h.length > 2 && h[1][2] < cut) h.shift();
 }
@@ -579,11 +579,44 @@ function appendStarTrailPoint(idx, lon, lat) {
 }
 
 /** Добавляет точку в историю конкретной планеты. (v5.7.0) */
+var _retroCache = {};
+/** v7.0.0: планета в ретроградном движении (геоцентрическая эклиптическая долгота убывает). */
+function isRetrograde(key, date) {
+  if (!astroOk() || key === 'Sun' || key === 'Moon') return false;
+  var ck = key + ':' + Math.floor(date.getTime() / 43200000);
+  if (ck in _retroCache) return _retroCache[ck];
+  var v = false;
+  try {
+    var b = Astronomy.Body[key];
+    var e1 = Astronomy.Ecliptic(Astronomy.GeoVector(b, date, true)).elon;
+    var e2 = Astronomy.Ecliptic(Astronomy.GeoVector(b, new Date(date.getTime() + 86400000), true)).elon;
+    v = (((e2 - e1 + 540) % 360) - 180) < 0;
+  } catch (e) { v = false; }
+  _retroCache[ck] = v;
+  return v;
+}
+
+/** v7.0.0: Луна у узла орбиты: {which:'rahu'|'ketu', dist} или null. */
+function moonNodePass(date) {
+  if (!astroOk()) return null;
+  try {
+    var ml = Astronomy.EclipticGeoMoon(date).lon;
+    var om = meanNodeLon(date);
+    var dr = Math.abs(((ml - om + 540) % 360) - 180 - 0);
+    var d1 = Math.abs(((ml - om + 540) % 360) - 180);
+    var d2 = Math.abs(((ml - om - 180 + 540) % 360) - 180);
+    if (d1 < NODE_PASS_DEG && d1 <= d2) return { which: 'rahu', dist: d1 };
+    if (d2 < NODE_PASS_DEG) return { which: 'ketu', dist: d2 };
+  } catch (e) {}
+  return null;
+}
+
 function appendPlanetTrailPoint(key, lon, lat) {
   var trail = state.astro.trails.planets;
   if (!trail.history[key]) trail.history[key] = [];
   pushTimed(trail.history[key], lon, lat, state.astro.date.getTime(),
-            TRAIL_SAMPLE_MS.planets, trail.days * 86400000);
+            TRAIL_SAMPLE_MS.planets, trail.days * 86400000,
+            isRetrograde(key, state.astro.date) ? 1 : 0);
 }
 
 /** Добавляет точку в историю хвоста МКС. (v5.8.0) */
@@ -910,6 +943,34 @@ function angDistDeg(a, b) {
   return Math.acos(Math.max(-1, Math.min(1, c))) / D;
 }
 
+/**
+ * v6.8.0: данные для наблюдателя. Возвращает { rows:[{key,alt,az,elong}], sunAlt }.
+ * Высота/азимут — топоцентрические, с рефракцией; элонгация — угол от Солнца.
+ */
+function observerInfo(date) {
+  if (!astroOk()) return null;
+  var o = state.observer, A = state.astro;
+  try {
+    var obs = new Astronomy.Observer(o.lat, o.lon, 0);
+    var keys = ['Sun'];
+    if (A.showMoon) keys.push('Moon');
+    if (A.showPlanets) PLANETS.forEach(function(pl) { if (planetOn(pl.key)) keys.push(pl.key); });
+    var rows = [], sunAlt = null;
+    keys.forEach(function(k) {
+      var b  = Astronomy.Body[k];
+      var eq = Astronomy.Equator(b, date, obs, true, true);
+      var hz = Astronomy.Horizon(date, obs, eq.ra, eq.dec, 'normal');
+      var el = (k === 'Sun') ? null : Astronomy.AngleFromSun(b, date);
+      if (k === 'Sun') sunAlt = hz.altitude;
+      rows.push({ key: k, alt: hz.altitude, az: hz.azimuth, elong: el });
+    });
+    return { rows: rows, sunAlt: sunAlt };
+  } catch (e) {
+    console.error('[astro] observerInfo:', e.message || e);
+    return null;
+  }
+}
+
 function wrapLon(l) { return ((l + 540) % 360) - 180; }
 
 /**
@@ -1010,7 +1071,8 @@ function astroAnyOn() {
          state.astro.showStars  || state.astro.showIss  ||  // v5.8.0
          state.astro.showMilkyWay ||                        // v5.9.0
          state.astro.showZodiac   || state.showEcliptic ||  // v6.0.0
-         state.astro.showShadow   || state.astro.showNodes;  // v6.6.0
+         state.astro.showShadow   || state.astro.showNodes ||  // v6.6.0
+         state.observer.on || state.showRings;     // v7.1.5                                   // v6.8.0
 }
 
 /**

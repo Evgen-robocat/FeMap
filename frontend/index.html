@@ -35,7 +35,7 @@
   <title>FlatEarthMap</title>
 
   <!-- 1. Стили — первыми чтобы не было мигания -->
-  <link rel="stylesheet" href="/static/style.css?v=670">
+  <link rel="stylesheet" href="/static/style.css?v=717">
 
   <!-- 2. D3.js v7 — до всех map-скриптов, они зависят от d3.* -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
@@ -50,11 +50,15 @@
   <!-- 5. Модули карты — строго в этом порядке:
        config → state → astro → render → main
        Каждый следующий видит глобальные переменные предыдущего -->
-  <script src="/static/config.js?v=671"></script>
-  <script src="/static/state.js?v=670"></script>
-  <script src="/static/astro.js?v=670"></script>
-  <script src="/static/render.js?v=670"></script>
-  <script src="/static/main.js?v=670"></script>
+  <script src="/static/config.js?v=719"></script>
+  <script src="/static/state.js?v=719"></script>
+  <script src="/static/astro.js?v=717"></script>
+  <script src="/static/satellite.js?v=717"></script>
+  <script src="/static/eclipse.js?v=717"></script>
+  <script src="/static/events.js?v=717"></script>
+  <script src="/static/phases.js?v=717"></script>
+  <script src="/static/render.js?v=719"></script>
+  <script src="/static/main.js?v=719"></script>
 
 </head>
 <body>
@@ -109,7 +113,7 @@
         <span data-i18n="labelsChk">Подписи координат</span>
       </label>
       <label class="checkbox-label">
-        <input type="checkbox" id="chk-cities" checked>
+        <input type="checkbox" id="chk-cities">
         <span class="checkbox-custom"></span>
         <span data-i18n="citiesChk">🏙 Города и метки</span>
       </label>
@@ -135,6 +139,20 @@
         <span class="checkbox-custom"></span>
         <span data-i18n="tropicsChk">Тропики</span>
       </label>
+      <!-- v6.9.0: вид из космоса -->
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-sat">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="satChk">🛰 Вид из космоса (NASA)</span>
+      </label>
+      <div id="sat-opts" style="display:none; margin:0 0 8px 26px;">
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-sat-night" checked>
+          <span class="checkbox-custom"></span>
+          <span data-i18n="satNightChk">🌃 ночь и огни городов</span>
+        </label>
+        <div style="font-size:9px; color:#6a8a9a;" data-i18n="satCredit">Текстуры: Solar System Scope, CC BY 4.0 (данные NASA)</div>
+      </div>
       <label class="checkbox-label">
         <input type="checkbox" id="chk-ecliptic">
         <span class="checkbox-custom"></span>
@@ -145,23 +163,38 @@
         <span class="checkbox-custom"></span>
         <span data-i18n="tzChk">Часовые пояса</span>
       </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-tz-labels">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="tzLabelsChk">Подписи поясов</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-tz-dial">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="tzDialChk">Циферблат по кругу (от Гринвича)</span>
+      </label>
     </div>
 
     <!-- Чекбоксы астрономии -->
     <div class="control-group checkbox-group"
          style="border-top:1px solid #1e3a5a; padding-top:6px; margin-top:4px;">
       <label class="checkbox-label">
-        <input type="checkbox" id="chk-sun">
+        <input type="checkbox" id="chk-sun" checked>
         <span class="checkbox-custom"></span>
         <span data-i18n="sunChk">☀ Солнце</span>
       </label>
       <label class="checkbox-label">
-        <input type="checkbox" id="chk-night">
+        <input type="checkbox" id="chk-night" checked>
         <span class="checkbox-custom"></span>
         <span data-i18n="nightChk">🌓 День / Ночь</span>
       </label>
+      <label class="checkbox-label" style="margin-left:22px;">
+        <input type="checkbox" id="chk-twilight">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="twiChk">сумерки (гражд. / навиг. / астр.)</span>
+      </label>
       <label class="checkbox-label">
-        <input type="checkbox" id="chk-moon">
+        <input type="checkbox" id="chk-moon" checked>
         <span class="checkbox-custom"></span>
         <span data-i18n="moonChk">🌙 Луна</span>
       </label>
@@ -175,6 +208,50 @@
         <input type="checkbox" id="chk-nodes">
         <span class="checkbox-custom"></span>
         <span data-i18n="nodesChk">☊☋ Узлы Луны (Раху / Кету)</span>
+      </label>
+      <!-- v6.8.0: наблюдатель -->
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-observer">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="obsChk">👁 Наблюдатель (точка, высота / азимут)</span>
+      </label>
+      <div id="observer-opts" style="display:none; margin:2px 0 8px 26px;">
+        <div style="display:flex; gap:4px; margin-bottom:4px;">
+          <input type="text" inputmode="decimal" id="obs-lat" style="width:50%;min-width:0;padding:6px;">
+          <input type="text" inputmode="decimal" id="obs-lon" style="width:50%;min-width:0;padding:6px;">
+        </div>
+        <div style="display:flex; gap:4px;">
+          <button id="btn-obs-pick" class="btn-preset" style="flex:1;padding:5px 2px;font-size:10px;" data-i18n="obsPick">📍 Выбрать на карте</button>
+          <button id="btn-obs-here" class="btn-preset" style="flex:1;padding:5px 2px;font-size:10px;" data-i18n="obsHere">Центр карты</button>
+        </div>
+      </div>
+      <!-- v7.1.5: круги видимости — отдельно от наблюдателя -->
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-rings">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="ringsChk">⭕ Круги видимости (тело над горизонтом)</span>
+      </label>
+      <div id="rings-opts" style="display:none; margin:0 0 8px 26px;">
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-ring-sun" checked>
+          <span class="checkbox-custom"></span>
+          <span data-i18n="ringSunFill">заливка светом Солнца</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-ring-moon" checked>
+          <span class="checkbox-custom"></span>
+          <span data-i18n="ringMoonFill">заливка светом Луны (по фазе)</span>
+        </label>
+      </div>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-phase">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="phaseChk">🌗 Фазы (Луна, Меркурий, Венера, Марс)</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="chk-realvis">
+        <span class="checkbox-custom"></span>
+        <span data-i18n="realVisChk">👁 Реальная видимость (серым — не видна)</span>
       </label>
       <label class="checkbox-label">
         <input type="checkbox" id="chk-planets">
@@ -244,14 +321,49 @@
              style="width:100%; box-sizing:border-box; margin-bottom:5px; border-radius:6px;
                     background:#0d1a26; color:#e0e6ed; border:1px solid #253545; padding:6px;
                     font-family:monospace; font-size:13px; color-scheme:dark;">
-      <div style="display:flex; gap:5px; margin-bottom:3px;">
-        <button id="btn-ecl-solar" class="btn-preset" style="flex:1;padding:5px 2px;font-size:10px;"
-                data-i18n="eclSolar">☀ след. затмение</button>
-        <button id="btn-ecl-lunar" class="btn-preset" style="flex:1;padding:5px 2px;font-size:10px;"
-                data-i18n="eclLunar">🌙 след. затмение</button>
-      </div>
+      <!-- v7.1.1: времена года -->
+      <details id="seasons-details" style="margin-bottom:4px;">
+        <summary data-i18n="seasonsTitle" style="cursor:pointer; font-size:0.85rem; color:#a0d8ef;">Времена года</summary>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; margin:5px 0;">
+          <button id="btn-season-0" class="btn-preset" style="padding:5px 2px;font-size:10px;">♈ равноденствие · март</button>
+          <button id="btn-season-1" class="btn-preset" style="padding:5px 2px;font-size:10px;">☀ солнцестояние · июнь</button>
+          <button id="btn-season-2" class="btn-preset" style="padding:5px 2px;font-size:10px;">♎ равноденствие · сент.</button>
+          <button id="btn-season-3" class="btn-preset" style="padding:5px 2px;font-size:10px;">❄ солнцестояние · дек.</button>
+        </div>
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-season-mk">
+          <span class="checkbox-custom"></span>
+          <span data-i18n="seasonMkChk">Отметки Солнца в эти моменты</span>
+        </label>
+      </details>
+      <!-- v7.1.0: блок «Затмения» -->
+      <details id="ecl-details" open style="margin-bottom:4px;">
+        <summary data-i18n="eclTitle" style="cursor:pointer; font-size:0.85rem; color:#a0d8ef;">🌘 Затмения</summary>
+        <select id="ecl-list" style="width:100%; box-sizing:border-box; margin:5px 0; border-radius:6px;
+                background:#0d1a26; color:#e0e6ed; border:1px solid #253545; padding:5px; font-size:11px;"></select>
+        <div style="display:flex; gap:4px; margin-bottom:3px;">
+          <button id="btn-ecl-prev-solar" class="btn-preset" style="flex:1;padding:5px 2px;font-size:10px;" data-i18n="eclPrevSolar">◀ Солнечное</button>
+          <button id="btn-ecl-next-solar" class="btn-preset" style="flex:1;padding:5px 2px;font-size:10px;" data-i18n="eclNextSolar">Солнечное ▶</button>
+        </div>
+        <div style="display:flex; gap:4px; margin-bottom:3px;">
+          <button id="btn-ecl-prev-lunar" class="btn-preset" style="flex:1;padding:5px 2px;font-size:10px;" data-i18n="eclPrevLunar">◀ Лунное</button>
+          <button id="btn-ecl-next-lunar" class="btn-preset" style="flex:1;padding:5px 2px;font-size:10px;" data-i18n="eclNextLunar">Лунное ▶</button>
+        </div>
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-ecl-area" checked>
+          <span class="checkbox-custom"></span>
+          <span data-i18n="eclAreaChk">Область видимости (пятно)</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-ecl-track">
+          <span class="checkbox-custom"></span>
+          <span data-i18n="eclTrackChk">След (линия центра)</span>
+        </label>
+      </details>
       <div id="ecl-info" style="font-family:monospace; font-size:10px; color:#c8d8f0;
            text-align:center; min-height:12px; margin-bottom:6px;"></div>
+      <div id="observer-info" style="font-family:monospace; font-size:10px; color:#8fe3f0;
+           text-align:center; white-space:pre-line; margin-bottom:6px;"></div>
       <div id="shadow-info" style="font-family:monospace; font-size:10px; color:#c8b8f0;
            text-align:center; white-space:pre-line; margin-bottom:6px;"></div>
 
@@ -292,6 +404,8 @@
                 style="flex:1; padding:5px 2px; font-size:10px;">▶ ×20</button>
         <button id="btn-spd-100" class="btn-preset"
                 style="flex:1; padding:5px 2px; font-size:10px;">▶ ×100</button>
+        <button id="btn-spd-3600" class="btn-preset" data-i18n-title="speedDeg" title="15°/с (1 ч за 1 с)"
+                style="flex:1.3; padding:5px 2px; font-size:10px;">▶ ×3600</button>
       </div>
       <div style="display:flex; align-items:center; gap:6px; margin-bottom:2px;">
         <button id="btn-speed-play" class="btn-preset" data-i18n-title="speedPlayTitle"
@@ -331,7 +445,8 @@
 
     <!-- Форма добавления точек -->
     <div class="user-points-form">
-      <h3 data-i18n="pointsTitle">Управление точками</h3>
+      <details id="points-details">
+      <summary data-i18n="pointsTitle" style="cursor:pointer; font-size:0.85rem; color:#a0d8ef; margin-bottom:6px;">Управление точками</summary>
       <div class="control-group">
         <input type="text" id="add-name"
                data-i18n-placeholder="pointsName"
@@ -359,6 +474,7 @@
            style="margin-top:12px;">Список активных точек</p>
         <ul id="points-list" class="points-list"></ul>
       </div>
+      </details>
     </div>
 
     <div id="status" class="status-bar">…</div>
@@ -366,6 +482,7 @@
 
   <!-- Карта -->
   <div id="map">
+    <div id="top-info"></div>
     <button id="btn-ruler-map" class="map-overlay-btn" title="📏">📏</button>
   </div>
 

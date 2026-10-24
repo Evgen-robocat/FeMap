@@ -274,6 +274,7 @@ async function loadTimezones() {
     var data = await d3.json(TZ_URL);
     if (!data || !data.features || !data.features.length) throw new Error('bad timezones.json');
     data.features.forEach(function(f) {
+      tzDensify(f.geometry.coordinates);      // v6.7.1: рёбра по прямой в градусах, а не по дуге большого круга
       f._etc = /^Etc\//.test(f.properties.z);
       f._areas = f.geometry.coordinates.map(function(poly) {
         return d3.geoArea({ type: 'Polygon', coordinates: poly });
@@ -387,13 +388,16 @@ function toggleRuler(active) {
 ================================================================ */
 
 /* ── Координаты тел (v6.4.0) ───────────────────────────────── */
-var CO_KEYS = ['Sun', 'Moon'].concat(PLANETS.map(function(p) { return p.key; }), ['Iss']);
+var CO_KEYS = ['Sun', 'Moon'].concat(PLANETS.map(function(p) { return p.key; }), ['Iss', 'Shadow', 'Rahu', 'Ketu']);
 
 function coordsOptLabel(k) {
   var t = LANG[state.lang];
   if (k === 'Sun')  return '☀ ' + t.bodySun;
   if (k === 'Moon') return '🌙 ' + t.bodyMoon;
   if (k === 'Iss')  return '🛰 ' + t.bodyIss;
+  if (k === 'Shadow') return '🌑 ' + t.shadowName;
+  if (k === 'Rahu') return '☊ ' + t.rahu;
+  if (k === 'Ketu') return '☋ ' + t.ketu;
   for (var i = 0; i < PLANETS.length; i++) {
     if (PLANETS[i].key === k) return planetOptLabel(PLANETS[i]);
   }
@@ -476,6 +480,7 @@ function applyLang() {
     if (el) el.textContent = coordsOptLabel(k);
   });
   updatePlayButtons();
+  updateSeasonButtons();   // v7.1.1
   if (state.projection) {
     renderCities();
     renderLabels();   // v6.0.0 — названия экватора и тропиков
@@ -502,9 +507,30 @@ function calculateRulerDistances() {
   }
 }
 
+function setObserver(lat, lon) {                 // v6.8.0
+  state.observer.lat = lat; state.observer.lon = lon;
+  var la = document.getElementById('obs-lat'), lo = document.getElementById('obs-lon');
+  if (la) la.value = +lat.toFixed(2);
+  if (lo) lo.value = +lon.toFixed(2);
+  renderAstro();
+}
+
 function handleMapClick(event) {
   hideRouteTooltip();
   hideIssTooltip();
+  if (state.observer.pick) {                      // v6.8.0: выбор точки наблюдателя
+    var op = d3.pointer(event, state.svg.node());
+    var oc = state.projection.invert(d3.zoomTransform(state.svg.node()).invert(op));
+    if (oc && !isNaN(oc[0]) && !isNaN(oc[1])) {
+      setObserver(oc[1], oc[0]);
+      state.observer.pick = false;
+      var pb = document.getElementById('btn-obs-pick');
+      if (pb) pb.style.outline = '';
+      setStatus('');
+      renderTopInfo();
+    }
+    return;
+  }
   if (!state.ruler.active) return;
 
   var pt     = d3.pointer(event, state.svg.node());
@@ -830,6 +856,14 @@ async function init() {
     if (e.target.checked) loadTimezones();
     renderTimezones(true); renderLabels();
   });
+  document.getElementById('chk-tz-labels').addEventListener('change', function(e) {
+    state.showTzLabels = e.target.checked;    // v6.7.1
+    renderLabels();
+  });
+  document.getElementById('chk-tz-dial').addEventListener('change', function(e) {
+    state.showTzDial = e.target.checked;      // v6.7.1
+    renderLabels();
+  });
   document.getElementById('chk-ecliptic').addEventListener('change', function(e) {
     state.showEcliptic = e.target.checked;
     updateAstroTimePanel();   // эклиптике нужна панель времени
@@ -867,6 +901,49 @@ async function init() {
   });
   buildPlanetOpts();
   buildCoordsOpts();   // v6.4.0
+
+  /* v6.9.0: вид из космоса */
+  document.getElementById('chk-sat').addEventListener('change', function(e) {
+    state.showSat = e.target.checked;
+    document.getElementById('sat-opts').style.display = e.target.checked ? 'block' : 'none';
+    render();   // v7.1.4: границы стран скрываются под картинкой
+  });
+  document.getElementById('chk-sat-night').addEventListener('change', function(e) {
+    state.showSatNight = e.target.checked;
+    renderSatellite(true);
+  });
+
+  /* v6.8.0: наблюдатель */
+  (function() {
+    var chk = document.getElementById('chk-observer');
+    var opts = document.getElementById('observer-opts');
+    var la = document.getElementById('obs-lat'), lo = document.getElementById('obs-lon');
+    la.value = state.observer.lat; lo.value = state.observer.lon;
+    chk.addEventListener('change', function(e) {
+      state.observer.on = e.target.checked;
+      opts.style.display = e.target.checked ? 'block' : 'none';
+      if (!e.target.checked) state.observer.pick = false;
+      updateAstroTimePanel();
+      renderAstro();
+    });
+    function fromInputs() {
+      var a = parseFloat(la.value), b = parseFloat(lo.value);
+      if (isNaN(a) || isNaN(b)) return;
+      setObserver(Math.max(-90, Math.min(90, a)), wrapLon(b));
+    }
+    la.addEventListener('change', fromInputs);
+    lo.addEventListener('change', fromInputs);
+    document.getElementById('btn-obs-pick').addEventListener('click', function() {
+      if (state.ruler.active) toggleRuler(false);
+      state.observer.pick = !state.observer.pick;
+      this.style.outline = state.observer.pick ? '2px solid #22d3ee' : '';
+      setStatus(state.observer.pick ? LANG[state.lang].obsPickOn : '');
+      renderTopInfo();
+    });
+    document.getElementById('btn-obs-here').addEventListener('click', function() {
+      setObserver(state.lat, state.lon);
+    });
+  })();
 
   /* Млечный Путь — данные грузятся при первом включении (v5.9.0).
      Слушатель стоит после общего, поэтому флаг уже выставлен. */
@@ -997,8 +1074,60 @@ async function init() {
   /* ── Календарь и затмения (v6.4.0) ─────────────────────────── */
   var dt = document.getElementById('inp-astro-datetime');
   dt.addEventListener('change', function() { setDateFromInput(dt.value); });
-  document.getElementById('btn-ecl-solar').addEventListener('click', function() { jumpToEclipse('solar'); });
-  document.getElementById('btn-ecl-lunar').addEventListener('click', function() { jumpToEclipse('lunar'); });
+  /* v7.1.5: круги видимости отдельно от наблюдателя */
+  document.getElementById('chk-rings').addEventListener('change', function(e) {
+    state.showRings = e.target.checked;
+    document.getElementById('rings-opts').style.display = e.target.checked ? 'block' : 'none';
+    updateAstroTimePanel(); renderAstro();
+  });
+  document.getElementById('chk-ring-sun').addEventListener('change', function(e) {
+    state.ringFillSun = e.target.checked; renderAstro();
+  });
+  document.getElementById('chk-ring-moon').addEventListener('change', function(e) {
+    state.ringFillMoon = e.target.checked; renderAstro();
+  });
+
+  /* v7.1.2: стартовые слои (Солнце, День/Ночь, Луна) включены */
+  updateAstroTimePanel();
+  if (state.projection) renderAstro();
+
+  /* v7.1.3: фазы, реальная видимость */
+  document.getElementById('chk-phase').addEventListener('change', function(e) {
+    state.showPhase = e.target.checked; renderAstro();
+  });
+  document.getElementById('chk-realvis').addEventListener('change', function(e) {
+    state.realVis = e.target.checked; renderAstro();
+  });
+
+  /* v7.1.1: времена года, сумерки */
+  updateSeasonButtons();
+  [0, 1, 2, 3].forEach(function(i) {
+    document.getElementById('btn-season-' + i).addEventListener('click', function() { jumpToSeason(i); });
+  });
+  document.getElementById('chk-season-mk').addEventListener('change', function(e) {
+    state.showSeasonMk = e.target.checked; renderAstro();
+  });
+  document.getElementById('chk-twilight').addEventListener('change', function(e) {
+    state.showTwilight = e.target.checked; renderAstro();
+  });
+
+  /* v7.1.0: блок «Затмения» */
+  document.getElementById('btn-ecl-prev-solar').addEventListener('click', function() { eclStep('solar', -1); });
+  document.getElementById('btn-ecl-next-solar').addEventListener('click', function() { eclStep('solar', 1); });
+  document.getElementById('btn-ecl-prev-lunar').addEventListener('click', function() { eclStep('lunar', -1); });
+  document.getElementById('btn-ecl-next-lunar').addEventListener('click', function() { eclStep('lunar', 1); });
+  document.getElementById('ecl-list').addEventListener('change', function(e) {
+    if (e.target.value === '') return;
+    var ev = eclipseList()[parseInt(e.target.value, 10)];
+    if (ev) eclSelect(ev);
+  });
+  document.getElementById('chk-ecl-area').addEventListener('change', function(e) {
+    state.eclipse.showArea = e.target.checked; renderAstro();
+  });
+  document.getElementById('chk-ecl-track').addEventListener('change', function(e) {
+    state.eclipse.showTrack = e.target.checked; renderAstro();
+  });
+  buildEclipseSelect();
 
   /* ── Панель хвостов (v5.6.0) ─────────────────────────────── */
   injectTrailControls();

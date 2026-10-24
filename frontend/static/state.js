@@ -76,12 +76,14 @@ var state = {
   /* ── Слои карты ────────────────────────────────────────── */
   showGrid:   true,
   showLabels: false,
-  showCities: true,
+  showCities: false,   // v7.1.2: по умолчанию выкл.
   showRoutes: false,  // ✈ маршруты самолётов
   showEquator:  false,  // v6.0.0 — экватор (широта 0°)
   showTropics:  false,  // v6.0.0 — тропики (широта ±TROPIC_LAT)
   showEcliptic: false,  // v6.0.0 — эклиптика (зависит от времени)
   showTimezones: false, // v6.5.0 — часовые пояса
+  showTzLabels: false,  // v6.7.1 — подписи смещений на карте (по умолчанию выкл.)
+  showTzDial: false,    // v6.7.1 — циферблат по кругу диска (отсчёт от Гринвича)
   tz: { data: null, loading: false, key: '', offKey: null, offSig: '', sigGroups: '', groups: [], drawn: false },   // v6.7.0
 
   /* ── Данные ────────────────────────────────────────────── */
@@ -122,6 +124,13 @@ var state = {
   points: [],       // [{ name, lat, lon } | { names:{ru,en,de}, lat, lon }]
 
   /* ── Линейка ───────────────────────────────────────────── */
+  showRings: false, ringFillSun: true, ringFillMoon: true,   // v7.1.5 — круги видимости отдельно от наблюдателя
+  showSat: false, showSatNight: true,   // v6.9.0 — вид из космоса
+  showPhase: false, realVis: false,   // v7.1.3
+  showSeasonMk: false, showTwilight: false,   // v7.1.1
+  eclipse: { sel: null, showArea: true, showTrack: false },   // v7.1.0
+  observer: { on:false, lat:50.45, lon:30.52, pick:false },   // v6.8.0
+
   ruler: {
     active:     false,
     points:     [],    // 0, 1 или 2 элемента: [[lon,lat], ...]
@@ -131,12 +140,13 @@ var state = {
 
   /* ── Астрономия ────────────────────────────────────────── */
   astro: {
-    showSun:     false,
-    showNight:   false,
-    showMoon:    false,
+    showSun:     true,    // v7.1.2: по умолчанию вкл.
+    showNight:   true,    // v7.1.2
+    showMoon:    true,    // v7.1.2
     showPlanets: false,
     coordsOn: { Sun:true, Moon:true, Iss:true, Mercury:false, Venus:false, Mars:false,
-                Jupiter:false, Saturn:false, Uranus:false, Neptune:false },  // v6.4.0
+                Jupiter:false, Saturn:false, Uranus:false, Neptune:false,
+                Shadow:false, Rahu:false, Ketu:false },  // v6.4.0 (+ v7.0.0)
     planetsOn: { Mercury:true, Venus:true, Mars:true, Jupiter:true,
                  Saturn:true, Uranus:true, Neptune:true },  // v6.2.0
     showStars:   false,

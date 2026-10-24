@@ -142,7 +142,7 @@ function createSVG() {
   // milkyway (v5.9.0): над ночной тенью, под маршрутами и рамкой диска.
   // zodiac, ecliptic, lines (v6.0.0): над Млечным Путём; lines — экватор
   // и тропики, поверх остальных слоёв неба.
-  ['water','land','borders','grid','timezones','night','milkyway','zodiac','ecliptic','shadow','lines',
+  ['water','land','sat','borders','grid','timezones','night','milkyway','zodiac','ecliptic','eclipse','shadow','observer','lines',
    'routes','border'].forEach(function(id) {
     mc.append('g').attr('id', 'layer-' + id);
   });
@@ -154,7 +154,7 @@ function createSVG() {
   // layer-iss добавлен между layer-planets и layer-stars (v5.8.0)
   [
     'labels','zlabels','cities','ruler',
-    'trail-sun','trail-moon','trail-stars','trail-planets','trail-iss','shadow-mk',
+    'trail-sun','trail-moon','trail-stars','trail-planets','trail-iss','shadow-mk','observer-mk','mw-mark','season-mk','phase-mk',
     'sun','moon','planets','iss','stars'
   ].forEach(function(id) {
     state.svg.append('g').attr('id', 'layer-' + id);
@@ -241,9 +241,11 @@ function render() {
       .attr('d', state.path).attr('fill', COLORS.land);
   }
 
+  renderSatellite(true);   // v6.9.0
+
   var lb = state.svg.select('#layer-borders');
   lb.selectAll('*').remove();
-  if (state.borders) {
+  if (state.borders && !state.showSat) {      // v7.1.7: поверх картинки из космоса границ нет
     lb.selectAll('path').data(state.borders.features).join('path')
       .attr('d', state.path).attr('fill', 'none')
       .attr('stroke', COLORS.borders).attr('stroke-width', 0.6);
@@ -303,10 +305,58 @@ function tzOffsetMin(tzid, date, fallback) {
   }
 }
 
+/**
+ * v6.7.1: добавляет промежуточные точки на длинных рёбрах (> 1°).
+ * В данных рёбра подразумеваются прямыми в градусах (по параллели или меридиану),
+ * а d3 соединяет вершины дугой большого круга — вдали от центра проекции,
+ * на краю диска, контур зоны уходил от береговой линии.
+ */
+function tzDensify(polys) {
+  polys.forEach(function(poly) {
+    for (var r = 0; r < poly.length; r++) {
+      var ring = poly[r], out = [ring[0]];
+      for (var i = 1; i < ring.length; i++) {
+        var a = ring[i - 1], b = ring[i];
+        var dx = b[0] - a[0], dy = b[1] - a[1];
+        if (Math.abs(dx) <= 180) {
+          var n = Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / 1);
+          for (var k = 1; k < n; k++) out.push([a[0] + dx * k / n, a[1] + dy * k / n]);
+        }
+        out.push(b);
+      }
+      poly[r] = out;
+    }
+  });
+}
+
+/** v6.7.1: точка для подписи гарантированно внутри многоугольника (центроид d3 у зон с «дырками» может уйти в сторону). */
+function tzLabelPoint(poly) {
+  var P = { type: 'Polygon', coordinates: poly };
+  var c = d3.geoCentroid(P);
+  if (isFinite(c[0]) && d3.geoContains(P, c)) return c;
+  var ring = poly[0], A = 0, cx = 0, cy = 0, minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+  for (var i = 0; i < ring.length - 1; i++) {
+    var x0 = ring[i][0], y0 = ring[i][1], x1 = ring[i + 1][0], y1 = ring[i + 1][1], w = x0 * y1 - x1 * y0;
+    A += w; cx += (x0 + x1) * w; cy += (y0 + y1) * w;
+    minx = Math.min(minx, x0); maxx = Math.max(maxx, x0); miny = Math.min(miny, y0); maxy = Math.max(maxy, y0);
+  }
+  var pc = A ? [cx / (3 * A), cy / (3 * A)] : [(minx + maxx) / 2, (miny + maxy) / 2];
+  if (d3.geoContains(P, pc)) return pc;
+  var best = null, bd = 1e18;                  // перебор сетки: ближайшая к центру внутренняя точка
+  for (var y = Math.max(miny, -85); y <= Math.min(maxy, 85); y += 2) {
+    for (var x = minx; x <= maxx; x += 2) {
+      if (!d3.geoContains(P, [x, y])) continue;
+      var d = (x - pc[0]) * (x - pc[0]) + (y - pc[1]) * (y - pc[1]);
+      if (d < bd) { bd = d; best = [x, y]; }
+    }
+  }
+  return best || c;
+}
+
 function tzName(min) {
-  if (min === 0) return 'UTC';
+  if (min === 0) return '0';                 // v6.7.1: без слова UTC
   var a = Math.abs(min), h = Math.floor(a / 60), m = a % 60;
-  return 'UTC' + (min > 0 ? '+' : '\u2212') + h + (m ? ':' + (m < 10 ? '0' : '') + m : '');
+  return (min > 0 ? '+' : '\u2212') + h + (m ? ':' + (m < 10 ? '0' : '') + m : '');
 }
 
 /** Пересчитывает смещения зон (не чаще раза в 15 мин модельного времени) и группы по смещению. */
@@ -337,7 +387,7 @@ function tzUpdateOffsets(date) {
   });
   tz.groups = Object.keys(map).map(function(k) {
     var g = map[k];
-    var c = d3.geoCentroid({ type: 'Polygon', coordinates: g.best });
+    var c = tzLabelPoint(g.best);
     return { off: g.off, geom: { type: 'MultiPolygon', coordinates: g.coords }, lon: c[0], lat: c[1], area: g.bestA };
   }).sort(function(a, b) { return a.off - b.off; });
 }
@@ -361,6 +411,36 @@ function renderTimezones(force) {
       .attr('fill', col).attr('stroke', col).attr('stroke-width', 0.5)
       .attr('vector-effect', 'non-scaling-stroke').attr('pointer-events', 'none');
   });
+}
+
+/**
+ * v6.7.1: циферблат по кругу диска. 24 деления — меридианы через каждые 15°
+ * от Гринвича (0 вверху у метки Greenwich). Деление стоит в направлении
+ * (азимуте) от центра проекции на точку меридиана на экваторе; при центре
+ * на полюсе это в точности долгота. Подпись — смещение в часах от Гринвича.
+ */
+function renderTzDial(layer, tr) {
+  var c = state.projection.translate(), R = state.projection.scale() * Math.PI;
+  var f1 = state.lat * Math.PI / 180, l1 = state.lon * Math.PI / 180;
+  var g = layer.append('g').attr('pointer-events', 'none');
+  var base = tr.apply([c[0], c[1]]);
+  g.append('circle').attr('cx', base[0]).attr('cy', base[1]).attr('r', R * tr.k)
+    .attr('fill', 'none').attr('stroke', 'rgba(255,255,255,0.35)').attr('stroke-width', 1);
+  for (var h = -12; h < 12; h++) {
+    var lon = h * 15, dl = lon * Math.PI / 180 - l1;
+    var th = Math.atan2(Math.sin(dl), -Math.sin(f1) * Math.cos(dl));   // азимут на точку экватора (f2 = 0)
+    var ux = Math.sin(th), uy = -Math.cos(th);
+    var p0 = tr.apply([c[0] + ux * R, c[1] + uy * R]);
+    var inx = p0[0] - ux * (h === 0 ? 14 : 8), iny = p0[1] - uy * (h === 0 ? 14 : 8);
+    g.append('line').attr('x1', p0[0]).attr('y1', p0[1]).attr('x2', inx).attr('y2', iny)
+      .attr('stroke', h === 0 ? '#ffd54a' : 'rgba(255,255,255,0.7)').attr('stroke-width', h === 0 ? 2 : 1);
+    g.append('text').attr('x', p0[0] - ux * 22).attr('y', p0[1] - uy * 22).attr('dy', '0.35em')
+      .attr('text-anchor', 'middle').attr('font-family', 'monospace')
+      .attr('font-size', h === 0 ? '11px' : '9px').attr('font-weight', h === 0 ? 'bold' : 'normal')
+      .attr('fill', h === 0 ? '#ffd54a' : '#ffffff')
+      .attr('stroke', 'rgba(0,0,0,0.7)').attr('stroke-width', 2.5).attr('paint-order', 'stroke')
+      .text(h === 0 ? '0' : (h > 0 ? '+' : '\u2212') + Math.abs(h));
+  }
 }
 
 /**
@@ -396,7 +476,7 @@ function renderLabels() {
     names.push({ lat: -TROPIC_LAT, text: t.tropicCapricorn, color: LINES_STYLE.tropics.color });
   }
   /* v6.7.0: подписи часовых поясов — на крупнейшем участке зоны */
-  if (state.showTimezones && state.tz.data) {
+  if (state.showTimezones && state.showTzLabels && state.tz.data) {
     var placed = [];
     state.tz.groups.slice().sort(function(a, b) { return b.area - a.area; }).forEach(function(gr) {
       var tp = state.projection([gr.lon, gr.lat]);
@@ -416,6 +496,8 @@ function renderLabels() {
         .text(tzName(gr.off));
     });
   }
+
+  if (state.showTzDial) renderTzDial(layer, tr);
 
   names.forEach(function(n) {
     var proj = state.projection([state.lon, n.lat]);
@@ -554,6 +636,18 @@ function renderNight() {
   layer.selectAll('*').remove();
   if (!state.astro.showNight) return;
   var sp = getSunSubpoint(state.astro.date);
+  if (state.showTwilight) {                         // v7.1.1: сумеречные пояса
+    var aLat = -sp.lat, aLon = sp.lon >= 0 ? sp.lon - 180 : sp.lon + 180;
+    [[90, 0.14], [96, 0.14], [102, 0.14], [108, 0.18]].forEach(function(z) {
+      layer.append('path')
+        .datum(d3.geoCircle().center([aLon, aLat]).radius(180 - z[0]).precision(1.5)())
+        .attr('d', state.path).attr('fill', 'rgba(0,8,28,' + z[1] + ')')
+        .attr('stroke', z[0] === 90 ? 'rgba(100,180,255,0.55)' : 'rgba(100,180,255,0.30)')
+        .attr('stroke-width', 1).attr('stroke-dasharray', z[0] === 90 ? null : '3,3')
+        .attr('vector-effect', 'non-scaling-stroke').attr('pointer-events', 'none');
+    });
+    return;
+  }
   layer.append('path').datum(nightGeoJSON(sp))
     .attr('d', state.path)
     .attr('fill', 'rgba(0,8,28,0.50)')
@@ -657,6 +751,22 @@ function skyFrame() {
  * Млечный Путь: пять вложенных полупрозрачных полигонов-изофот.
  * Рисуется через skyFrame(); перерисовка — только при смене ключа.
  */
+function renderSgrA() {
+  var lm = state.svg.select('#layer-mw-mark');
+  lm.selectAll('*').remove();
+  if (!state.astro.showMilkyWay) return;
+  var f = skyFrame();
+  var p = f.proj([SGRA_RA_DEG, SGRA_DEC]);
+  if (!p) return;
+  var q = d3.zoomTransform(state.svg.node()).apply(p);
+  var c = '#ff5d73', r = 8;
+  lm.append('line').attr('x1', q[0] - r).attr('x2', q[0] + r).attr('y1', q[1]).attr('y2', q[1]);
+  lm.append('line').attr('x1', q[0]).attr('x2', q[0]).attr('y1', q[1] - r).attr('y2', q[1] + r);
+  lm.selectAll('line').attr('stroke', c).attr('stroke-width', 2.4).attr('stroke-linecap', 'round')
+    .attr('pointer-events', 'none');
+  shadowLabel(lm, q[0], q[1] - 12, 'Sgr A*', '#ff8da0');
+}
+
 function renderMilkyWay() {
   var layer = state.svg.select('#layer-milkyway');
   var mw    = state.milkyway;
@@ -858,7 +968,7 @@ function renderZodiac() {
       info.style.display = 'none';
     } else {
       var t   = LANG[lang];
-      var sig = lang + '|' + hl.map(function(b) { return b.key + ':' + (b.cid || '-'); }).join('|');
+      var sig = lang + '|' + hl.map(function(b) { return b.key + ':' + (b.cid || '-') + (isRetrograde(b.key, a.date) ? 'R' : ''); }).join('|');
       info.style.display = 'block';
       if (info.dataset.sig !== sig) {            // DOM трогаем, только если текст изменился
         info.dataset.sig = sig;
@@ -871,6 +981,7 @@ function renderZodiac() {
           sym.textContent = b.sym + ' ';
           var nm = document.createElement('span');
           nm.textContent = b.cid ? zodiacName(b.cid, lang) : t.zodiacOutside;
+          if (isRetrograde(b.key, a.date)) nm.textContent += ' ℞ ' + t.retroTxt;
           if (!b.cid) nm.style.opacity = '0.6';
           span.appendChild(sym);
           span.appendChild(nm);
@@ -923,6 +1034,102 @@ function shadowLabel(layer, x, y, text, color) {
  * Узлы Луны: Раху (☊, восходящий) и Кету (☋, нисходящий) на эклиптике и
  * большой круг орбиты Луны.
  */
+/**
+ * v6.8.0: наблюдатель — круги видимости (горизонт, 90° от субточки тела),
+ * сумеречные кольца Солнца (−6°, −12°, −18°), маркер и таблица высота/азимут.
+ */
+/** v7.1.4: значок тела в центре его круга (где оно в зените). */
+function obsBodyMark(lm, tr, sp, sym, color, shown) {
+  if (shown) return;                      // у показанных тел свой маркер
+  var p = state.projection([sp.lon, sp.lat]);
+  if (!p) return;
+  var q = tr.apply(p);
+  lm.append('text').attr('x', q[0]).attr('y', q[1]).attr('dy', '0.35em').attr('text-anchor', 'middle')
+    .attr('font-size', '14px').attr('fill', color).attr('stroke', 'rgba(0,0,0,0.7)').attr('stroke-width', 2.5)
+    .attr('paint-order', 'stroke').attr('pointer-events', 'none').text(sym);
+}
+
+function renderObserver() {
+  var lc = state.svg.select('#layer-observer');
+  var lm = state.svg.select('#layer-observer-mk');
+  lc.selectAll('*').remove();
+  lm.selectAll('*').remove();
+  var info = document.getElementById('observer-info');
+  var o = state.observer;
+  if (info && !o.on) info.textContent = '';
+  if (!o.on && !state.showRings) return;
+  var t = LANG[state.lang], date = state.astro.date, A = state.astro;
+  var tr = d3.zoomTransform(state.svg.node());
+
+  function ring(sp, r, color, dash, w, op, fill) {
+    lc.append('path')
+      .datum(d3.geoCircle().center([sp.lon, sp.lat]).radius(r).precision(0.5)())
+      .attr('d', state.path).attr('fill', fill || 'none').attr('stroke', color)
+      .attr('stroke-width', w).attr('stroke-dasharray', dash).attr('opacity', op)
+      .attr('vector-effect', 'non-scaling-stroke').attr('pointer-events', 'none');
+  }
+
+  /* ── Круги видимости (v7.1.5: отдельно от наблюдателя) ── */
+  if (state.showRings) {
+    var sun = getSunSubpoint(date);
+    ring(sun, 90, '#fbbf24', '6,3', 1.6, 0.95, state.ringFillSun ? 'rgba(255,214,64,0.10)' : null);
+    obsBodyMark(lm, tr, sun, '☀', '#fbbf24', A.showSun);
+    [96, 102, 108].forEach(function(r) { ring(sun, r, '#fbbf24', '2,4', 1, 0.45); });
+    if (A.showMoon) {
+      var mp = bodySubpoint('Moon', date);
+      if (mp) {
+        /* заливка светом Луны: чем полнее фаза, тем ярче (0.03…0.20) */
+        var ph = (typeof bodyPhase === 'function') ? bodyPhase('Moon', date) : null;
+        var mf = ph ? ph.frac : 0.5;
+        ring(mp, 90, '#c8deff', '6,3', 1.4, 0.9,
+             state.ringFillMoon ? 'rgba(190,215,255,' + (0.03 + 0.17 * mf).toFixed(3) + ')' : null);
+        obsBodyMark(lm, tr, mp, '☾', '#c8deff', true);
+      }
+    }
+    if (A.showPlanets && astroOk()) {
+      PLANETS.forEach(function(pl) {
+        if (!planetOn(pl.key)) return;
+        var pp = bodySubpoint(pl.key, date);
+        if (pp) ring(pp, 90, pl.color, '3,3', 1, 0.7);
+      });
+    }
+  }
+
+  /* ── Наблюдатель: точка и таблица ── */
+  if (!o.on) return;
+  var p = state.projection([o.lon, o.lat]);
+  if (p) {
+    var q = tr.apply(p);
+    lm.append('circle').attr('cx', q[0]).attr('cy', q[1]).attr('r', 6)
+      .attr('fill', '#22d3ee').attr('stroke', '#083344').attr('stroke-width', 1.5)
+      .attr('pointer-events', 'none');
+    shadowLabel(lm, q[0], q[1] - 11, '👁 ' + o.lat.toFixed(2) + ', ' + o.lon.toFixed(2), '#67e8f9');
+  }
+
+  var oi = observerInfo(date);
+  if (!oi) { if (info) info.textContent = ''; return; }
+  var sa = oi.sunAlt;
+  var sky = sa > 0 ? t.obsDay : sa > -6 ? t.obsCivil : sa > -12 ? t.obsNaut : sa > -18 ? t.obsAstro : t.obsNight;
+  var lines = [t.obsSky + ': ' + sky];
+  oi.rows.forEach(function(r) {
+    var s = BODY_NAMES_OBS(r.key) + ' ' + t.obsAlt + ' ' + (r.alt >= 0 ? '+' : '') + r.alt.toFixed(1) + '° ' +
+            t.obsAz + ' ' + r.az.toFixed(0) + '°';
+    if (r.elong !== null) s += ' ' + t.obsElong + ' ' + r.elong.toFixed(0) + '°';
+    if (r.alt < 0) s += ' ↓';
+    lines.push(s);
+  });
+  if (info) info.textContent = lines.join('\n');
+}
+
+function BODY_NAMES_OBS(key) {
+  if (key === 'Sun')  return { ru:'☀ Солнце', en:'☀ Sun', de:'☀ Sonne' }[state.lang] || '☀';
+  if (key === 'Moon') return { ru:'☾ Луна',   en:'☾ Moon', de:'☾ Mond'  }[state.lang] || '☾';
+  for (var i = 0; i < PLANETS.length; i++) {
+    if (PLANETS[i].key === key) return PLANETS[i].sym + ' ' + (PLANETS[i].label[state.lang] || PLANETS[i].label.ru);
+  }
+  return key;
+}
+
 function renderShadow() {
   var lc = state.svg.select('#layer-shadow');
   var lm = state.svg.select('#layer-shadow-mk');
@@ -957,7 +1164,7 @@ function renderShadow() {
         lm.append('circle').attr('cx', q[0]).attr('cy', q[1]).attr('r', 7)
           .attr('fill', '#0b0b0b').attr('stroke', '#cfcfcf').attr('stroke-width', 1.5)
           .attr('pointer-events', 'none');
-        shadowLabel(lm, q[0], q[1] + 20, t.shadowName, '#e6e6e6');
+        shadowLabel(lm, q[0], q[1] + 20, t.shadowName + (state.astro.coordsOn.Shadow ? ' ' + sh.lat.toFixed(1) + '° ' + sh.lon.toFixed(1) + '°' : ''), '#e6e6e6');
       }
       txt = t.shadowName + ': ' + t.shadowUmbra + ' ' + sh.umbra.toFixed(2) + '°, ' +
             t.shadowPenumbra + ' ' + sh.penumbra.toFixed(2) + '°; ' +
@@ -974,20 +1181,30 @@ function renderShadow() {
       .attr('stroke', '#b388ff').attr('stroke-width', 1.2).attr('stroke-dasharray', '5,3')
       .attr('opacity', 0.85).attr('vector-effect', 'non-scaling-stroke')
       .attr('pointer-events', 'none');
+    var pass = moonNodePass(date);                       // v7.0.0
     [
-      { pt: nd.rahu, name: '☊ ' + t.rahu, color: '#c084fc' },
-      { pt: nd.ketu, name: '☋ ' + t.ketu, color: '#fb923c' }
+      { id: 'rahu', co: 'Rahu', pt: nd.rahu, name: '☊ ' + t.rahu, color: '#c084fc' },
+      { id: 'ketu', co: 'Ketu', pt: nd.ketu, name: '☋ ' + t.ketu, color: '#fb923c' }
     ].forEach(function(n) {
       var pp = state.projection([n.pt.lon, n.pt.lat]);
       if (!pp) return;
       var qq = tr.apply(pp);
-      lm.append('circle').attr('cx', qq[0]).attr('cy', qq[1]).attr('r', 5)
-        .attr('fill', n.color).attr('stroke', '#111').attr('stroke-width', 1)
+      var hot = pass && pass.which === n.id;
+      if (hot) {
+        lm.append('circle').attr('cx', qq[0]).attr('cy', qq[1]).attr('r', 15)
+          .attr('fill', n.color).attr('fill-opacity', 0.25)
+          .attr('stroke', '#fde047').attr('stroke-width', 2).attr('pointer-events', 'none');
+      }
+      lm.append('circle').attr('cx', qq[0]).attr('cy', qq[1]).attr('r', hot ? 7 : 5)
+        .attr('fill', n.color).attr('stroke', hot ? '#fde047' : '#111').attr('stroke-width', hot ? 2 : 1)
         .attr('pointer-events', 'none');
-      shadowLabel(lm, qq[0], qq[1] - 9, n.name, n.color);
+      shadowLabel(lm, qq[0], qq[1] - (hot ? 19 : 9),
+        n.name + (state.astro.coordsOn[n.co] ? ' ' + n.pt.lat.toFixed(1) + '° ' + n.pt.lon.toFixed(1) + '°' : ''),
+        hot ? '#fde047' : n.color);
     });
     var nodeTxt = '☊ ' + t.rahu + ' / ☋ ' + t.ketu + ' (' + t.meanNodeNote + ') Ω = ' + nd.om.toFixed(1) + '°';
     txt = txt ? txt + '\n' + nodeTxt : nodeTxt;
+    if (pass) txt += '\n⚠ ' + t.moonAtNode + ' ' + (pass.which === 'rahu' ? '☊ ' + t.rahu : '☋ ' + t.ketu) + ' (Δ ' + pass.dist.toFixed(2) + '°)';
   }
   if (info) info.textContent = txt;
 }
@@ -1092,8 +1309,10 @@ function renderTrailPolylineLegacy(layerId, history, color, bands, maxOpacity) {
  * @param {number}   bands
  * @param {number}   [maxOpacity=0.75]
  */
-function renderTrailPath(layerId, history, color, bands, maxOpacity) {
+function renderTrailPath(layerId, history, color, bands, maxOpacity, style) {
   if (!history || history.length < 2) return;
+  bands = 1; maxOpacity = TRAIL_OPACITY;          // v7.0.0: без градиента
+  style = style || {};
 
   var layer = state.svg.select('#' + layerId);
   var tr    = d3.zoomTransform(state.svg.node());
@@ -1142,7 +1361,8 @@ function renderTrailPath(layerId, history, color, bands, maxOpacity) {
       .attr('d', zoomedPath)
       .attr('fill', 'none')
       .attr('stroke', color)
-      .attr('stroke-width', 1.8)
+      .attr('stroke-width', style.width || TRAIL_WIDTH)
+      .attr('stroke-dasharray', style.dash || null)
       .attr('stroke-linecap', 'round')
       .attr('stroke-linejoin', 'round')
       .attr('opacity', opacity)
@@ -1198,7 +1418,20 @@ function renderPlanetTrails() {
     if (!planetOn(pl.key)) return;
     var h = t.history[pl.key];
     if (!h || h.length < 2) return;
-    renderTrailPath('layer-trail-planets', h, pl.color, TRAIL_BANDS.planets, 0.60);
+    /* v7.0.0: ретроградные участки — жирным штрихом */
+    var run = [], flag = null;
+    function flush() {
+      if (run.length > 1) {
+        renderTrailPath('layer-trail-planets', run, pl.color, 1, 1,
+          flag ? { dash: TRAIL_RETRO_DASH, width: TRAIL_RETRO_WIDTH } : null);
+      }
+    }
+    h.forEach(function(p) {
+      var f = p[4] ? 1 : 0;
+      if (flag !== null && f !== flag) { var last = run[run.length - 1]; flush(); run = [last]; }
+      flag = f; run.push(p);
+    });
+    flush();
   });
 }
 
@@ -1280,6 +1513,11 @@ function drawMarker(layerId, lon, lat, opts) {
   var pt = tr.apply(proj);
   var px = pt[0], py = pt[1];
 
+  if (opts.hot) {                         // v7.1.0: затмение — подсветка тела
+    layer.append('circle').attr('cx', px).attr('cy', py).attr('r', opts.r + 8)
+      .attr('fill', 'rgba(255,60,60,0.18)').attr('stroke', '#ff4d4d').attr('stroke-width', 2.2)
+      .attr('stroke-dasharray', '4,3').attr('pointer-events', 'none');
+  }
   if (opts.glow) {
     layer.append('circle').attr('cx', px).attr('cy', py)
       .attr('r', opts.r + 10).attr('fill', opts.glow);
@@ -1441,12 +1679,19 @@ function renderStars() {
  * Порядок: ночь → хвосты → маркеры.
  */
 function renderAstro() {
+  renderSatellite();   // v6.9.0: ночная сторона зависит от даты
   renderTimezones();   // v6.7.0: смещения зависят от даты (летнее время)
   renderNight();
   renderMilkyWay(); // v5.9.0
+  renderSgrA();     // v7.0.0
   renderZodiac();   // v6.0.0
   renderEcliptic(); // v6.0.0
+  renderEclipse();  // v7.1.0
+  renderSeasons();  // v7.1.1
   renderShadow();   // v6.6.0
+  renderObserver(); // v6.8.0
+  renderPhases();   // v7.1.3
+  renderTopInfo();  // v7.1.1
 
   /* Очищаем хвостовые слои */
   ['trail-sun','trail-moon','trail-stars','trail-planets','trail-iss'].forEach(function(id) {
@@ -1471,6 +1716,7 @@ function renderAstro() {
       glow: 'rgba(251,191,36,0.15)',
       labelColor: '#fde68a',
       coords: state.astro.coordsOn.Sun !== false,
+      hot: eclipseActive(date).solar,
     });
   }
 
@@ -1483,6 +1729,7 @@ function renderAstro() {
         glow: 'rgba(180,210,255,0.10)',
         labelColor: '#c8deff',
         coords: state.astro.coordsOn.Moon !== false,
+        hot: eclipseActive(date).solar || eclipseActive(date).lunar,
       });
     }
   }
@@ -1498,20 +1745,22 @@ function renderAstro() {
       if (!proj) return;
       var pt = tr.apply(proj);
       var px = pt[0], py = pt[1];
+      var pv = planetVisible(pl.key, date);            // v7.1.3
       layer.append('circle').attr('cx', px).attr('cy', py).attr('r', pl.r)
-        .attr('fill', pl.color).attr('stroke', '#000').attr('stroke-width', 0.8)
-        .attr('opacity', 0.92);
+        .attr('fill', pv.vis ? pl.color : '#7a7a7a').attr('stroke', '#000').attr('stroke-width', 0.8)
+        .attr('opacity', pv.vis ? 0.92 : 0.45);
       layer.append('text').attr('x', px).attr('y', py).attr('dy', '0.38em')
         .attr('text-anchor', 'middle').attr('font-size', pl.r + 'px')
         .attr('pointer-events', 'none').text(pl.sym);
       var PL = PLANET_LABEL_STYLE;
       layer.append('text').attr('x', px + pl.r + 3).attr('y', py).attr('dy', '0.35em')
-        .attr('fill', pl.color).attr('font-size', PL.size)
+        .attr('fill', pv.vis ? pl.color : '#8a8a8a').attr('font-size', PL.size)
         .attr('font-family', PL.family)
         .attr('stroke', PL.halo).attr('stroke-width', PL.haloW)
         .attr('paint-order', 'stroke')
         .attr('pointer-events', 'none')
-        .text(pl.label[state.lang] || pl.label.ru);
+        .text((pl.label[state.lang] || pl.label.ru) +
+              (pv.vis ? '' : ' (' + (pv.why === 'sun' ? LANG[state.lang].nearSun : LANG[state.lang].belowHor) + ')'));
       if (state.astro.coordsOn[pl.key]) {          // v6.4.0
         layer.append('text').attr('x', px).attr('y', py + pl.r + 11)
           .attr('text-anchor', 'middle')

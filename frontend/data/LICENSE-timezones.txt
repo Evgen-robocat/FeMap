@@ -8,3 +8,9 @@ timezones.json — границы часовых поясов (упрощённ�
 объединена с Europe/Kyiv (границы Украины, признанные международным правом);
 добавлено поле "o" — стандартное смещение UTC в минутах (запасное значение).
 Фактическое смещение на выбранную дату считается в браузере по базе IANA (Intl).
+
+----------------------------------------------------------------------
+earth_day.jpg, earth_night.jpg (v6.9.0)
+Earth textures from Solar System Scope (https://www.solarsystemscope.com/textures/),
+licensed CC BY 4.0, based on NASA data. Resized/recompressed (day 4096x2048,
+night 2048x1024) via the three.js examples repository.

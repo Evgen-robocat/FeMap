@@ -101,7 +101,23 @@
 
 'use strict';
 
-var VERSION = window.FEMAP_VERSION || '6.7.0';
+var VERSION = window.FEMAP_VERSION || '7.1.9';
+
+/* v6.9.0: «Вид из космоса» */
+/* v7.0.0: хвосты — яркие, без градиента */
+var TRAIL_OPACITY = 0.92;
+var TRAIL_WIDTH   = 2.4;
+var TRAIL_RETRO_DASH = '6,4';
+var TRAIL_RETRO_WIDTH = 3.2;
+
+/* Центр Галактики Sgr A* (J2000) */
+var SGRA_RA_DEG = 266.41683;   // 17h45m40.04s
+var SGRA_DEC    = -29.00781;
+var NODE_PASS_DEG = 1.5;       // Луна ближе этого к узлу — подсветка
+
+var SAT_DAY_URL   = '/data/earth_day.jpg?v=690';
+var SAT_NIGHT_URL = '/data/earth_night.jpg?v=690';
+var SAT_MAX_PX    = 1200;   // сторона перепроецированной картинки, px
 
 /* ═══════════════════════════════════════════════════════════════
    ЦВЕТА
@@ -124,7 +140,7 @@ var COLORS = {
    ПЛАНЕТЫ — конфигурация для рендера
 ═══════════════════════════════════════════════════════════════ */
 var PLANETS = [
-  { key:'Mercury', sym:'☿', color:'#b0b0b0', r:4, label:{ru:'Меркурий',en:'Mercury',de:'Merkur'  } },
+  { key:'Mercury', sym:'☿', color:'#f0abfc', r:4, label:{ru:'Меркурий',en:'Mercury',de:'Merkur'  } },
   { key:'Venus',   sym:'♀', color:'#ffe060', r:5, label:{ru:'Венера',  en:'Venus',  de:'Venus'   } },
   { key:'Mars',    sym:'♂', color:'#ff6644', r:5, label:{ru:'Марс',    en:'Mars',   de:'Mars'    } },
   { key:'Jupiter', sym:'♃', color:'#ffcc88', r:8, label:{ru:'Юпитер',  en:'Jupiter',de:'Jupiter' } },
@@ -316,7 +332,7 @@ var LANG = {
     eclNotFound:'Затмение не найдено', eclNeedLib:'Нужна библиотека astronomy-engine',
     errLoad:'Ошибка загрузки', errMilky:'Ошибка загрузки Млечного Пути',
     errZodiac:'Ошибка загрузки зодиака',
-    tzChk:'Часовые пояса',                                                  // v6.5.0
+    tzChk:'Часовые пояса', tzLabelsChk:'Подписи поясов', tzDialChk:'Циферблат по кругу (от Гринвича)',                                                  // v6.5.0
     secDiurnal:'Суточное движение', secYearly:'Годовое движение · звёздные сутки',
     speedReal:'×1 реально', speedRealTitle:'Реальная скорость: 1 с = 1 с',
     speedPlayTitle:'Пуск / пауза', speedSliderTitle:'Скорость анимации',
@@ -325,6 +341,14 @@ var LANG = {
     tzLoading:'Загрузка часовых поясов…', errTz:'Ошибка загрузки часовых поясов',
     shadowChk:'🌑 Чёрное солнце (Умбра / Пенумбра)', nodesChk:'☊☋ Узлы Луны (Раху / Кету)',   // v6.6.0
     shadowName:'Чёрное солнце', shadowUmbra:'умбра', shadowPenumbra:'пенумбра',
+    satChk:'🛰 Вид из космоса (NASA)', satNightChk:'🌃 ночь и огни городов', satCredit:'Текстуры: Solar System Scope, CC BY 4.0 (данные NASA)', errSat:'Не удалось загрузить текстуры Земли',   // v6.9.0
+    retroTxt:'ретроградная', sgrName:'Sgr A* — центр Галактики', moonAtNode:'Луна проходит', shadowCoordsName:'Тень Земли', speedDeg:'15°/с (1 ч за 1 с)',   // v7.0.0
+    eclTitle:'🌘 Затмения', eclPick:'— выбрать из списка —', eclPrevSolar:'◀ Солнечное', eclNextSolar:'Солнечное ▶', eclPrevLunar:'◀ Лунное', eclNextLunar:'Лунное ▶', eclAreaChk:'Область видимости (пятно)', eclTrackChk:'След (линия центра)', eclNow:'сейчас идёт',   // v7.1.0
+    seasonsTitle:'Времена года', seasonMkChk:'Отметки Солнца в эти моменты', twiChk:'сумерки (гражд. / навиг. / астр.)',   // v7.1.1
+    phaseChk:'🌗 Фазы (Луна, Меркурий, Венера, Марс)', realVisChk:'👁 Реальная видимость (серым — не видна)', phNew:'новолуние', phWaxCres:'растущий серп', phFirstQ:'первая четверть', phWaxGib:'растущая', phFull:'полнолуние', phWanGib:'убывающая', phLastQ:'последняя четверть', phWanCres:'убывающий серп', nearSun:'у Солнца', belowHor:'под горизонтом',   // v7.1.3
+    obsRingNote:'круг = где тело над горизонтом',   // v7.1.4
+    ringsChk:'⭕ Круги видимости (тело над горизонтом)', ringSunFill:'заливка светом Солнца', ringMoonFill:'заливка светом Луны (по фазе)',   // v7.1.5
+    obsChk:'👁 Наблюдатель (точка, высота / азимут)', obsLat:'Широта', obsLon:'Долгота', obsPick:'📍 Выбрать на карте', obsPickOn:'Клик по карте — точка наблюдателя', obsHere:'Центр карты', obsAlt:'выс.', obsAz:'аз.', obsElong:'элонг.', obsDay:'День', obsCivil:'Гражданские сумерки', obsNaut:'Навигационные сумерки', obsAstro:'Астрономические сумерки', obsNight:'Ночь', obsSky:'Небо', obsBelow:'под горизонтом',   // v6.8.0
     shadowCenterMoon:'центр→Луна', inUmbra:'Луна в тени, фаза', inPenumbra:'Луна в полутени, фаза',
     rahu:'Раху', ketu:'Кету', meanNodeNote:'средний узел',
   },
@@ -384,7 +408,7 @@ var LANG = {
     eclNotFound:'No eclipse found', eclNeedLib:'astronomy-engine library is required',
     errLoad:'Load error', errMilky:'Milky Way load error',
     errZodiac:'Zodiac load error',
-    tzChk:'Time zones',                                                     // v6.5.0
+    tzChk:'Time zones', tzLabelsChk:'Zone labels', tzDialChk:'Rim clock dial (from Greenwich)',                                                     // v6.5.0
     secDiurnal:'Daily motion', secYearly:'Yearly motion · sidereal day',
     speedReal:'×1 real time', speedRealTitle:'Real speed: 1 s = 1 s',
     speedPlayTitle:'Play / pause', speedSliderTitle:'Animation speed',
@@ -393,6 +417,14 @@ var LANG = {
     tzLoading:'Loading time zones…', errTz:'Time zone load error',
     shadowChk:'🌑 Black Sun (Umbra / Penumbra)', nodesChk:'☊☋ Lunar nodes (Rahu / Ketu)',   // v6.6.0
     shadowName:'Black Sun', shadowUmbra:'umbra', shadowPenumbra:'penumbra',
+    satChk:'🛰 View from space (NASA)', satNightChk:'🌃 night side & city lights', satCredit:'Textures: Solar System Scope, CC BY 4.0 (NASA data)', errSat:'Could not load Earth textures',   // v6.9.0
+    retroTxt:'retrograde', sgrName:'Sgr A* — Galactic centre', moonAtNode:'Moon passes', shadowCoordsName:'Earth\'s shadow', speedDeg:'15°/s (1 h per 1 s)',   // v7.0.0
+    eclTitle:'🌘 Eclipses', eclPick:'— pick from list —', eclPrevSolar:'◀ Solar', eclNextSolar:'Solar ▶', eclPrevLunar:'◀ Lunar', eclNextLunar:'Lunar ▶', eclAreaChk:'Visibility area (blob)', eclTrackChk:'Track (centre line)', eclNow:'in progress',   // v7.1.0
+    seasonsTitle:'Seasons', seasonMkChk:'Mark the Sun at these moments', twiChk:'twilight (civil / nautical / astro.)',   // v7.1.1
+    phaseChk:'🌗 Phases (Moon, Mercury, Venus, Mars)', realVisChk:'👁 Real visibility (grey — not visible)', phNew:'new moon', phWaxCres:'waxing crescent', phFirstQ:'first quarter', phWaxGib:'waxing gibbous', phFull:'full moon', phWanGib:'waning gibbous', phLastQ:'last quarter', phWanCres:'waning crescent', nearSun:'near Sun', belowHor:'below horizon',   // v7.1.3
+    obsRingNote:'circle = where the body is above the horizon',   // v7.1.4
+    ringsChk:'⭕ Visibility circles (body above horizon)', ringSunFill:'fill: Sun light', ringMoonFill:'fill: Moonlight (by phase)',   // v7.1.5
+    obsChk:'👁 Observer (point, altitude / azimuth)', obsLat:'Latitude', obsLon:'Longitude', obsPick:'📍 Pick on map', obsPickOn:'Click the map to set observer', obsHere:'Map centre', obsAlt:'alt', obsAz:'az', obsElong:'elong.', obsDay:'Day', obsCivil:'Civil twilight', obsNaut:'Nautical twilight', obsAstro:'Astronomical twilight', obsNight:'Night', obsSky:'Sky', obsBelow:'below horizon',   // v6.8.0
     shadowCenterMoon:'centre→Moon', inUmbra:'Moon in umbra, mag.', inPenumbra:'Moon in penumbra, mag.',
     rahu:'Rahu', ketu:'Ketu', meanNodeNote:'mean node',
   },
@@ -452,7 +484,7 @@ var LANG = {
     eclNotFound:'Keine Finsternis gefunden', eclNeedLib:'Bibliothek astronomy-engine erforderlich',
     errLoad:'Ladefehler', errMilky:'Fehler beim Laden der Milchstraße',
     errZodiac:'Fehler beim Laden des Tierkreises',
-    tzChk:'Zeitzonen',                                                      // v6.5.0
+    tzChk:'Zeitzonen', tzLabelsChk:'Zonenbeschriftung', tzDialChk:'Zifferblatt am Rand (ab Greenwich)',                                                      // v6.5.0
     secDiurnal:'Tagesbewegung', secYearly:'Jahresbewegung · Sternentag',
     speedReal:'×1 Echtzeit', speedRealTitle:'Echte Geschwindigkeit: 1 s = 1 s',
     speedPlayTitle:'Start / Pause', speedSliderTitle:'Animationstempo',
@@ -461,6 +493,14 @@ var LANG = {
     tzLoading:'Zeitzonen werden geladen…', errTz:'Fehler beim Laden der Zeitzonen',
     shadowChk:'🌑 Schwarze Sonne (Umbra / Penumbra)', nodesChk:'☊☋ Mondknoten (Rahu / Ketu)',   // v6.6.0
     shadowName:'Schwarze Sonne', shadowUmbra:'Kernschatten', shadowPenumbra:'Halbschatten',
+    satChk:'🛰 Blick aus dem All (NASA)', satNightChk:'🌃 Nachtseite & Stadtlichter', satCredit:'Texturen: Solar System Scope, CC BY 4.0 (NASA-Daten)', errSat:'Erdtexturen konnten nicht geladen werden',   // v6.9.0
+    retroTxt:'rückläufig', sgrName:'Sgr A* — Galaktisches Zentrum', moonAtNode:'Mond passiert', shadowCoordsName:'Erdschatten', speedDeg:'15°/s (1 h pro 1 s)',   // v7.0.0
+    eclTitle:'🌘 Finsternisse', eclPick:'— aus Liste wählen —', eclPrevSolar:'◀ Sonnen-', eclNextSolar:'Sonnen- ▶', eclPrevLunar:'◀ Mond-', eclNextLunar:'Mond- ▶', eclAreaChk:'Sichtbarkeitsgebiet', eclTrackChk:'Spur (Mittellinie)', eclNow:'läuft',   // v7.1.0
+    seasonsTitle:'Jahreszeiten', seasonMkChk:'Sonne zu diesen Zeitpunkten markieren', twiChk:'Dämmerung (bürgerl. / naut. / astron.)',   // v7.1.1
+    phaseChk:'🌗 Phasen (Mond, Merkur, Venus, Mars)', realVisChk:'👁 Reale Sichtbarkeit (grau — unsichtbar)', phNew:'Neumond', phWaxCres:'zunehmende Sichel', phFirstQ:'erstes Viertel', phWaxGib:'zunehmend', phFull:'Vollmond', phWanGib:'abnehmend', phLastQ:'letztes Viertel', phWanCres:'abnehmende Sichel', nearSun:'nahe der Sonne', belowHor:'unter dem Horizont',   // v7.1.3
+    obsRingNote:'Kreis = wo der Körper über dem Horizont steht',   // v7.1.4
+    ringsChk:'⭕ Sichtbarkeitskreise (Körper über Horizont)', ringSunFill:'Füllung: Sonnenlicht', ringMoonFill:'Füllung: Mondlicht (nach Phase)',   // v7.1.5
+    obsChk:'👁 Beobachter (Punkt, Höhe / Azimut)', obsLat:'Breite', obsLon:'Länge', obsPick:'📍 Auf Karte wählen', obsPickOn:'Karte anklicken: Beobachterpunkt', obsHere:'Kartenmitte', obsAlt:'Höhe', obsAz:'Az.', obsElong:'Elong.', obsDay:'Tag', obsCivil:'Bürgerl. Dämmerung', obsNaut:'Nautische Dämmerung', obsAstro:'Astron. Dämmerung', obsNight:'Nacht', obsSky:'Himmel', obsBelow:'unter Horizont',   // v6.8.0
     shadowCenterMoon:'Zentrum→Mond', inUmbra:'Mond im Kernschatten, Mag.', inPenumbra:'Mond im Halbschatten, Mag.',
     rahu:'Rahu', ketu:'Ketu', meanNodeNote:'mittlerer Knoten',
   },
@@ -662,7 +702,7 @@ var ISS_TLE_FALLBACK = [
    Каждый множитель = реальных минут за один кадр анимации (80мс). */
 /* Скорость анимации (v6.5.0): множитель реального времени.
    ×1 — реальная скорость (1 с модели = 1 с). Ползунок логарифмический. */
-var SPEED_PRESETS = [1, 10, 20, 100];
+var SPEED_PRESETS = [1, 10, 20, 100, 3600];   // 3600 = 15°/с (1 ч за секунду)
 var SPEED_MAX     = 50000;
 
 /* Хвосты (v6.5.0): точки пишутся не чаще чем раз в TRAIL_SAMPLE_MS модельного
