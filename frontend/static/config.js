@@ -101,7 +101,7 @@
 
 'use strict';
 
-var VERSION = window.FEMAP_VERSION || '7.1.9';
+var VERSION = window.FEMAP_VERSION || '7.2.6';
 
 /* v6.9.0: «Вид из космоса» */
 /* v7.0.0: хвосты — яркие, без градиента */
@@ -291,6 +291,7 @@ var LANG = {
     addBtn:'+ Добавить на карту', activePoints:'Список активных точек',
     presetN:'Сев. полюс', presetS:'Юж. полюс',
     presetEq:'Экватор / 0,0', resetZoom:'⊙ Сброс зума',
+    rulerTrailChk:'🧲 магнит линейки: хвост × меридиан', 
     rulerClickA:'📏 Тапните точку A', rulerClickB:'📏 Тапните точку B',
     rulerDone:'📏 Замерено! Тапните для нового замера',
     sphereDist:'🌍 Сфера', aeDist:'📐 AE-карта', km:'км',
@@ -332,7 +333,8 @@ var LANG = {
     eclNotFound:'Затмение не найдено', eclNeedLib:'Нужна библиотека astronomy-engine',
     errLoad:'Ошибка загрузки', errMilky:'Ошибка загрузки Млечного Пути',
     errZodiac:'Ошибка загрузки зодиака',
-    tzChk:'Часовые пояса', tzLabelsChk:'Подписи поясов', tzDialChk:'Циферблат по кругу (от Гринвича)',                                                  // v6.5.0
+    tzChk:'Часовые пояса',
+    projLabel:'Проекция', projAE:'Азимутальная равнопромежуточная', projShR:'Карта с изогнутыми меридианами ↻', projShL:'Карта с изогнутыми меридианами ↺', tzLabelsChk:'Подписи поясов', tzDialChk:'Циферблат по кругу (от Гринвича)',                                                  // v6.5.0
     secDiurnal:'Суточное движение', secYearly:'Годовое движение · звёздные сутки',
     speedReal:'×1 реально', speedRealTitle:'Реальная скорость: 1 с = 1 с',
     speedPlayTitle:'Пуск / пауза', speedSliderTitle:'Скорость анимации',
@@ -343,6 +345,8 @@ var LANG = {
     shadowName:'Чёрное солнце', shadowUmbra:'умбра', shadowPenumbra:'пенумбра',
     satChk:'🛰 Вид из космоса (NASA)', satNightChk:'🌃 ночь и огни городов', satCredit:'Текстуры: Solar System Scope, CC BY 4.0 (данные NASA)', errSat:'Не удалось загрузить текстуры Земли',   // v6.9.0
     retroTxt:'ретроградная', sgrName:'Sgr A* — центр Галактики', moonAtNode:'Луна проходит', shadowCoordsName:'Тень Земли', speedDeg:'15°/с (1 ч за 1 с)',   // v7.0.0
+    trailInfTitle:'Без ограничения по времени: хвост растёт, старая часть прореживается (до нескольких тысяч точек; на медленных устройствах потолок снижается сам)',   // v7.2.3
+    trTitle:'☿♀ Транзиты по диску Солнца', trPick:'— выбрать транзит —', trPrevMer:'◀ Меркурий', trNextMer:'Меркурий ▶', trPrevVen:'◀ Венера', trNextVen:'Венера ▶', trAreaChk:'Карта видимости (начало → конец)', trTrackChk:'Путь Солнца в зените, C1 / макс. / C4', trDiscChk:'Диск Солнца с путём планеты', trMercury:'Транзит Меркурия', trVenus:'Транзит Венеры', trMax:'макс.', trC1:'C1', trC4:'C4', trH:'ч', trMin:'мин', trSep:'мин. расстояние от центра:', trObs_full:'видно полностью', trObs_part:'видно частично', trObs_none:'не видно (Солнце под горизонтом)',   // v7.2.1
     eclTitle:'🌘 Затмения', eclPick:'— выбрать из списка —', eclPrevSolar:'◀ Солнечное', eclNextSolar:'Солнечное ▶', eclPrevLunar:'◀ Лунное', eclNextLunar:'Лунное ▶', eclAreaChk:'Область видимости (пятно)', eclTrackChk:'След (линия центра)', eclNow:'сейчас идёт',   // v7.1.0
     seasonsTitle:'Времена года', seasonMkChk:'Отметки Солнца в эти моменты', twiChk:'сумерки (гражд. / навиг. / астр.)',   // v7.1.1
     phaseChk:'🌗 Фазы (Луна, Меркурий, Венера, Марс)', realVisChk:'👁 Реальная видимость (серым — не видна)', phNew:'новолуние', phWaxCres:'растущий серп', phFirstQ:'первая четверть', phWaxGib:'растущая', phFull:'полнолуние', phWanGib:'убывающая', phLastQ:'последняя четверть', phWanCres:'убывающий серп', nearSun:'у Солнца', belowHor:'под горизонтом',   // v7.1.3
@@ -367,6 +371,7 @@ var LANG = {
     addBtn:'+ Add to Map', activePoints:'Active Points',
     presetN:'North Pole', presetS:'South Pole',
     presetEq:'Equator / 0,0', resetZoom:'⊙ Reset Zoom',
+    rulerTrailChk:'🧲 Ruler snap: trail × meridian', 
     rulerClickA:'📏 Tap point A', rulerClickB:'📏 Tap point B',
     rulerDone:'📏 Measured! Tap again',
     sphereDist:'🌍 Sphere', aeDist:'📐 AE Map', km:'km',
@@ -408,7 +413,8 @@ var LANG = {
     eclNotFound:'No eclipse found', eclNeedLib:'astronomy-engine library is required',
     errLoad:'Load error', errMilky:'Milky Way load error',
     errZodiac:'Zodiac load error',
-    tzChk:'Time zones', tzLabelsChk:'Zone labels', tzDialChk:'Rim clock dial (from Greenwich)',                                                     // v6.5.0
+    tzChk:'Time zones',
+    projLabel:'Projection', projAE:'Azimuthal equidistant', projShR:'Curved-meridian map ↻', projShL:'Curved-meridian map ↺', tzLabelsChk:'Zone labels', tzDialChk:'Rim clock dial (from Greenwich)',                                                     // v6.5.0
     secDiurnal:'Daily motion', secYearly:'Yearly motion · sidereal day',
     speedReal:'×1 real time', speedRealTitle:'Real speed: 1 s = 1 s',
     speedPlayTitle:'Play / pause', speedSliderTitle:'Animation speed',
@@ -419,6 +425,8 @@ var LANG = {
     shadowName:'Black Sun', shadowUmbra:'umbra', shadowPenumbra:'penumbra',
     satChk:'🛰 View from space (NASA)', satNightChk:'🌃 night side & city lights', satCredit:'Textures: Solar System Scope, CC BY 4.0 (NASA data)', errSat:'Could not load Earth textures',   // v6.9.0
     retroTxt:'retrograde', sgrName:'Sgr A* — Galactic centre', moonAtNode:'Moon passes', shadowCoordsName:'Earth\'s shadow', speedDeg:'15°/s (1 h per 1 s)',   // v7.0.0
+    trailInfTitle:'No time limit: the trail keeps growing, its older part is thinned out (up to a few thousand points; lowered automatically on slow devices)',   // v7.2.3
+    trTitle:'☿♀ Transits across the Sun', trPick:'— pick a transit —', trPrevMer:'◀ Mercury', trNextMer:'Mercury ▶', trPrevVen:'◀ Venus', trNextVen:'Venus ▶', trAreaChk:'Visibility map (start → end)', trTrackChk:'Sun-at-zenith path, C1 / max / C4', trDiscChk:'Solar disc with the planet path', trMercury:'Transit of Mercury', trVenus:'Transit of Venus', trMax:'max', trC1:'C1', trC4:'C4', trH:'h', trMin:'min', trSep:'min. distance from centre:', trObs_full:'visible throughout', trObs_part:'partly visible', trObs_none:'not visible (Sun below horizon)',   // v7.2.1
     eclTitle:'🌘 Eclipses', eclPick:'— pick from list —', eclPrevSolar:'◀ Solar', eclNextSolar:'Solar ▶', eclPrevLunar:'◀ Lunar', eclNextLunar:'Lunar ▶', eclAreaChk:'Visibility area (blob)', eclTrackChk:'Track (centre line)', eclNow:'in progress',   // v7.1.0
     seasonsTitle:'Seasons', seasonMkChk:'Mark the Sun at these moments', twiChk:'twilight (civil / nautical / astro.)',   // v7.1.1
     phaseChk:'🌗 Phases (Moon, Mercury, Venus, Mars)', realVisChk:'👁 Real visibility (grey — not visible)', phNew:'new moon', phWaxCres:'waxing crescent', phFirstQ:'first quarter', phWaxGib:'waxing gibbous', phFull:'full moon', phWanGib:'waning gibbous', phLastQ:'last quarter', phWanCres:'waning crescent', nearSun:'near Sun', belowHor:'below horizon',   // v7.1.3
@@ -443,6 +451,7 @@ var LANG = {
     addBtn:'+ Zur Karte hinzufügen', activePoints:'Aktive Punkte',
     presetN:'Nordpol', presetS:'Südpol',
     presetEq:'Äquator / 0,0', resetZoom:'⊙ Zoom zurücksetzen',
+    rulerTrailChk:'🧲 Lineal rastet ein: Spur × Meridian', 
     rulerClickA:'📏 Punkt A antippen', rulerClickB:'📏 Punkt B antippen',
     rulerDone:'📏 Gemessen!',
     sphereDist:'🌍 Sphäre', aeDist:'📐 AE-Karte', km:'km',
@@ -484,7 +493,8 @@ var LANG = {
     eclNotFound:'Keine Finsternis gefunden', eclNeedLib:'Bibliothek astronomy-engine erforderlich',
     errLoad:'Ladefehler', errMilky:'Fehler beim Laden der Milchstraße',
     errZodiac:'Fehler beim Laden des Tierkreises',
-    tzChk:'Zeitzonen', tzLabelsChk:'Zonenbeschriftung', tzDialChk:'Zifferblatt am Rand (ab Greenwich)',                                                      // v6.5.0
+    tzChk:'Zeitzonen',
+    projLabel:'Projektion', projAE:'Azimutal abstandstreu', projShR:'Karte mit gekrümmten Meridianen ↻', projShL:'Karte mit gekrümmten Meridianen ↺', tzLabelsChk:'Zonenbeschriftung', tzDialChk:'Zifferblatt am Rand (ab Greenwich)',                                                      // v6.5.0
     secDiurnal:'Tagesbewegung', secYearly:'Jahresbewegung · Sternentag',
     speedReal:'×1 Echtzeit', speedRealTitle:'Echte Geschwindigkeit: 1 s = 1 s',
     speedPlayTitle:'Start / Pause', speedSliderTitle:'Animationstempo',
@@ -495,6 +505,8 @@ var LANG = {
     shadowName:'Schwarze Sonne', shadowUmbra:'Kernschatten', shadowPenumbra:'Halbschatten',
     satChk:'🛰 Blick aus dem All (NASA)', satNightChk:'🌃 Nachtseite & Stadtlichter', satCredit:'Texturen: Solar System Scope, CC BY 4.0 (NASA-Daten)', errSat:'Erdtexturen konnten nicht geladen werden',   // v6.9.0
     retroTxt:'rückläufig', sgrName:'Sgr A* — Galaktisches Zentrum', moonAtNode:'Mond passiert', shadowCoordsName:'Erdschatten', speedDeg:'15°/s (1 h pro 1 s)',   // v7.0.0
+    trailInfTitle:'Ohne Zeitlimit: die Spur wächst, der ältere Teil wird ausgedünnt (bis zu einigen tausend Punkten; auf langsamen Geräten automatisch weniger)',   // v7.2.3
+    trTitle:'☿♀ Transite vor der Sonne', trPick:'— Transit wählen —', trPrevMer:'◀ Merkur', trNextMer:'Merkur ▶', trPrevVen:'◀ Venus', trNextVen:'Venus ▶', trAreaChk:'Sichtbarkeitskarte (Anfang → Ende)', trTrackChk:'Spur des Sonnen-Zenits, C1 / Max. / C4', trDiscChk:'Sonnenscheibe mit Planetenbahn', trMercury:'Merkurtransit', trVenus:'Venustransit', trMax:'Max.', trC1:'C1', trC4:'C4', trH:'Std.', trMin:'Min.', trSep:'min. Abstand vom Zentrum:', trObs_full:'ganz sichtbar', trObs_part:'teilweise sichtbar', trObs_none:'nicht sichtbar (Sonne unter dem Horizont)',   // v7.2.1
     eclTitle:'🌘 Finsternisse', eclPick:'— aus Liste wählen —', eclPrevSolar:'◀ Sonnen-', eclNextSolar:'Sonnen- ▶', eclPrevLunar:'◀ Mond-', eclNextLunar:'Mond- ▶', eclAreaChk:'Sichtbarkeitsgebiet', eclTrackChk:'Spur (Mittellinie)', eclNow:'läuft',   // v7.1.0
     seasonsTitle:'Jahreszeiten', seasonMkChk:'Sonne zu diesen Zeitpunkten markieren', twiChk:'Dämmerung (bürgerl. / naut. / astron.)',   // v7.1.1
     phaseChk:'🌗 Phasen (Mond, Merkur, Venus, Mars)', realVisChk:'👁 Reale Sichtbarkeit (grau — unsichtbar)', phNew:'Neumond', phWaxCres:'zunehmende Sichel', phFirstQ:'erstes Viertel', phWaxGib:'zunehmend', phFull:'Vollmond', phWanGib:'abnehmend', phLastQ:'letztes Viertel', phWanCres:'abnehmende Sichel', nearSun:'nahe der Sonne', belowHor:'unter dem Horizont',   // v7.1.3
@@ -683,6 +695,21 @@ var ANIM_STEP = {
 
 /* Интервал между кадрами анимации (мс) */
 var ANIM_INTERVAL_MS = 80;
+
+/* v7.2.2: сколько пропущенных шагов «24ч» / «звёздные сутки» можно догнать за один кадр */
+var ANIM_CATCHUP_MAX = 3;
+
+/* v7.2.4: верхний предел зума карты (было 50) — чтобы попадать линейкой между близкими витками хвоста */
+var ZOOM_MAX = 150;
+
+/* v7.2.3: бессрочный хвост (∞, Солнце и планеты) — потолок точек на хвост; при превышении
+   старая часть прореживается вдвое (последние TRAIL_UNLIM_KEEP точек не трогаются).
+   Если кадры идут медленнее TRAIL_SLOW_MS, потолок автоматически снижается до
+   TRAIL_BUDGET_MIN (state.astro.trailBudget). */
+var TRAIL_UNLIM_MAX  = 6000;
+var TRAIL_UNLIM_KEEP = 256;
+var TRAIL_BUDGET_MIN  = 700;    // ниже авто-прореживание не опускается
+var TRAIL_SLOW_MS      = 150;    // средний интервал между кадрами, при котором потолок точек уменьшается (×0.7)
 
 /* ── МКС — TLE и скорость (v5.8.0) ─────────────────────────────
    ISS_TLE_URL: CelesTrak GP-endpoint, возвращает три строки текста.

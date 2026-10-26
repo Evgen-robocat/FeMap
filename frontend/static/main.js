@@ -515,6 +515,66 @@ function setObserver(lat, lon) {                 // v6.8.0
   renderAstro();
 }
 
+/**
+ * v7.2.4: точки пересечения видимых хвостов с меридианами mer (градусы долготы).
+ * Хвост между соседними точками истории идёт по долготе/широте линейно (так он и
+ * рисуется), поэтому широта пересечения — линейная интерполяция.
+ * @returns {Array<{lon:number, lat:number}>}
+ */
+function trailMeridianCrossings(mer) {
+  var A = state.astro, T = A.trails, hs = [], out = [];
+  if (T.sun.enabled && A.showSun) hs.push(T.sun.history);
+  if (T.moon.enabled && A.showMoon) hs.push(T.moon.history);
+  if (T.planets.enabled && A.showPlanets) {
+    PLANETS.forEach(function(pl) {
+      if (planetOn(pl.key) && T.planets.history[pl.key]) hs.push(T.planets.history[pl.key]);
+    });
+  }
+  if (T.stars.enabled && A.showStars) T.stars.history.forEach(function(h) { hs.push(h); });
+  if (T.iss.enabled && A.showIss) hs.push(T.iss.history);
+  hs.forEach(function(h) {
+    for (var i = 1; i < h.length; i++) {
+      var a = h[i - 1], b = h[i];
+      var dl = ((b[0] - a[0] + 540) % 360) - 180;
+      if (dl === 0 || Math.abs(dl) > 120) continue;
+      for (var k = 0; k < mer.length; k++) {
+        var d1 = ((mer[k] - a[0] + 540) % 360) - 180;
+        if (dl > 0 ? (d1 >= 0 && d1 <= dl) : (d1 <= 0 && d1 >= dl)) {
+          out.push({ lon: mer[k], lat: a[1] + d1 / dl * (b[1] - a[1]) });
+        }
+      }
+    }
+  });
+  return out;
+}
+
+/**
+ * v7.2.5: панель настроек не должна прокручиваться по горизонтали. CSS (overflow-x:
+ * hidden) закрывает жест; здесь — страховка: любой scrollLeft тут же сбрасывается.
+ * Диагностика: сайт с ?dbg=1 показывает, какие элементы панели шире её самой.
+ */
+function lockControlsX() {
+  var c = document.getElementById('controls');
+  if (!c) return;
+  c.addEventListener('scroll', function() { if (c.scrollLeft !== 0) c.scrollLeft = 0; }, { passive: true });
+  if (!/[?&]dbg=1\b/.test(location.search)) return;
+  setTimeout(function() {
+    var cb = c.getBoundingClientRect(), out = [];
+    c.querySelectorAll('*').forEach(function(el) {
+      var b = el.getBoundingClientRect();
+      if (b.width && b.right > cb.right + 1) {
+        out.push((el.id || el.tagName.toLowerCase() + (typeof el.className === 'string' && el.className ? '.' + el.className.split(' ')[0] : '')) + ' +' + Math.round(b.right - cb.right));
+      }
+    });
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;background:#400;color:#fff;font:11px/1.3 monospace;padding:6px;white-space:pre-wrap;';
+    d.textContent = 'dbg v' + VERSION + ' vw=' + innerWidth + ' ctrl: client=' + c.clientWidth + ' scrollW=' + c.scrollWidth + '\n' +
+      (out.length ? 'wider than panel:\n' + out.slice(0, 8).join('\n') : 'no element wider than panel') + '\n(tap to close)';
+    d.addEventListener('click', function() { d.remove(); });
+    document.body.appendChild(d);
+  }, 1500);
+}
+
 function handleMapClick(event) {
   hideRouteTooltip();
   hideIssTooltip();
@@ -557,6 +617,21 @@ function handleMapClick(event) {
     if (d < minD) { minD = d; coords = [p.lon, p.lat]; }
   });
 
+  /* v7.2.4: магнит к пересечению хвоста с меридианом — линии сетки (каждые GRID_STEP[0]°)
+     и меридиан первой точки: второй точкой попадаем на ту же долготу, расстояние идёт по меридиану */
+  if (state.rulerSnapTrail) {
+    var mer = [];
+    for (var m = -180; m < 180; m += GRID_STEP[0]) mer.push(m);
+    if (state.ruler.points.length === 1) mer.push(state.ruler.points[0][0]);
+    trailMeridianCrossings(mer).forEach(function(p) {
+      var proj = state.projection([p.lon, p.lat]);
+      if (!proj) return;
+      var sp = tr.apply(proj);
+      var d  = Math.hypot(sp[0] - mx, sp[1] - my);
+      if (d < minD) { minD = d; coords = [p.lon, p.lat]; }
+    });
+  }
+
   if (state.ruler.points.length >= 2) state.ruler.points = [];
   state.ruler.points.push(coords);
   calculateRulerDistances();
@@ -589,7 +664,7 @@ function injectTrailControls() {
 
   function makeRow(chkId, i18nKey, fallback,
                    sliderId, min, max, val,
-                   spanId, unitKey, unitFallback) {
+                   spanId, unitKey, unitFallback, infId) {
     var row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:5px;margin-bottom:4px;';
 
@@ -630,6 +705,22 @@ function injectTrailControls() {
     unitSpan.textContent = t[unitKey] || unitFallback;
     row.appendChild(unitSpan);
 
+    if (infId) {                       // v7.2.3: «∞» — хвост без ограничения по времени
+      var il = document.createElement('label');
+      il.className = 'checkbox-label';
+      il.style.cssText = 'display:flex;align-items:center;gap:2px;margin-left:2px;';
+      il.setAttribute('data-i18n-title', 'trailInfTitle');
+      il.title = t.trailInfTitle || '';
+      var ic = document.createElement('input');
+      ic.type = 'checkbox'; ic.id = infId;
+      var icc = document.createElement('span'); icc.className = 'checkbox-custom';
+      var it = document.createElement('span');
+      it.style.cssText = 'font-size:13px;line-height:1;color:#a0c4d8;';
+      it.textContent = '∞';
+      il.appendChild(ic); il.appendChild(icc); il.appendChild(it);
+      row.appendChild(il);
+    }
+
     return row;
   }
 
@@ -637,7 +728,7 @@ function injectTrailControls() {
   wrap.appendChild(makeRow(
     'chk-trail-sun',   'trailSunChk',   '☀ хвост',
     'slider-trail-sun-days', 1, 365, state.astro.trails.sun.days,
-    'val-trail-sun', 'trailDays', 'дн'));
+    'val-trail-sun', 'trailDays', 'дн', 'chk-trail-sun-inf'));
 
   /* Луна — v5.7.0: слайдер до 366 */
   wrap.appendChild(makeRow(
@@ -655,7 +746,7 @@ function injectTrailControls() {
   wrap.appendChild(makeRow(
     'chk-trail-planets', 'trailPlanetsChk', '🪐 хвост',
     'slider-trail-planets-days', 1, 366, state.astro.trails.planets.days,
-    'val-trail-planets', 'trailDays', 'дн'));
+    'val-trail-planets', 'trailDays', 'дн', 'chk-trail-planets-inf'));
 
   /* МКС (v5.8.0) — шаг в минутах, max 525960 = 365 суток */
   wrap.appendChild(makeRow(
@@ -677,6 +768,30 @@ function injectTrailControls() {
 ================================================================ */
 
 function bindTrailHandlers() {
+
+  /* ── v7.2.3: «∞» — бессрочный хвост Солнца и планет (у Луны хвост за годы — сплошная каша и самая дорогая отрисовка) ── */
+  [['sun', 'chk-trail-sun-inf', 'slider-trail-sun-days', 'val-trail-sun'],
+   ['planets', 'chk-trail-planets-inf', 'slider-trail-planets-days', 'val-trail-planets']
+  ].forEach(function(c) {
+    var chk = document.getElementById(c[1]);
+    if (!chk) return;
+    var tr = state.astro.trails[c[0]];
+    chk.checked = !!tr.unlimited;
+    chk.addEventListener('change', function() {
+      tr.unlimited = this.checked;
+      state.astro.trailBudget = 0;                     // потолок точек — заново
+      var sl = document.getElementById(c[2]), sp = document.getElementById(c[3]);
+      if (sl) sl.disabled = this.checked;
+      if (sp) sp.textContent = this.checked ? '∞' : tr.days;
+      if (!this.checked) {                             // вернулись к окну в днях — обрезаем
+        var lenMs = tr.days * 86400000;
+        if (c[0] === 'planets') {
+          for (var pk in tr.history) if (Object.prototype.hasOwnProperty.call(tr.history, pk)) trimTimed(tr.history[pk], lenMs);
+        } else trimTimed(tr.history, lenMs);
+      }
+      renderAstro();
+    });
+  });
 
   /* ── Солнце ──────────────────────────────────────────────── */
   var chkSun = document.getElementById('chk-trail-sun');
@@ -832,6 +947,9 @@ async function init() {
   document.getElementById('chk-cities').addEventListener('change', function(e) {
     state.showCities = e.target.checked; render();
   });
+  document.getElementById('chk-ruler-trail').addEventListener('change', function(e) {   // v7.2.4
+    state.rulerSnapTrail = e.target.checked;
+  });
   document.getElementById('chk-ruler').addEventListener('change', function(e) {
     toggleRuler(e.target.checked);
   });
@@ -855,6 +973,12 @@ async function init() {
     state.showTimezones = e.target.checked;   // v6.5.0
     if (e.target.checked) loadTimezones();
     renderTimezones(true); renderLabels();
+  });
+  document.getElementById('sel-proj').addEventListener('change', function(e) {   // v7.2.0
+    state.projMode = e.target.value;
+    buildProjection();
+    calculateRulerDistances();
+    render();
   });
   document.getElementById('chk-tz-labels').addEventListener('change', function(e) {
     state.showTzLabels = e.target.checked;    // v6.7.1
@@ -1128,10 +1252,27 @@ async function init() {
     state.eclipse.showTrack = e.target.checked; renderAstro();
   });
   buildEclipseSelect();
+  /* v7.2.1: транзиты */
+  document.getElementById('btn-tr-prev-mer').addEventListener('click', function() { transitStep('Mercury', -1); });
+  document.getElementById('btn-tr-next-mer').addEventListener('click', function() { transitStep('Mercury', 1); });
+  document.getElementById('btn-tr-prev-ven').addEventListener('click', function() { transitStep('Venus', -1); });
+  document.getElementById('btn-tr-next-ven').addEventListener('click', function() { transitStep('Venus', 1); });
+  document.getElementById('tr-list').addEventListener('change', function(e) {
+    if (e.target.value === '') return;
+    var ev = transitList()[parseInt(e.target.value, 10)];
+    if (ev) trSelect(ev);
+  });
+  [['chk-tr-area', 'showArea'], ['chk-tr-track', 'showTrack'], ['chk-tr-disc', 'showDisc']].forEach(function(c) {
+    document.getElementById(c[0]).addEventListener('change', function(e) {
+      state.transit[c[1]] = e.target.checked; renderAstro();
+    });
+  });
+  buildTransitSelect();
 
   /* ── Панель хвостов (v5.6.0) ─────────────────────────────── */
   injectTrailControls();
   bindTrailHandlers();
+  lockControlsX();   // v7.2.5
 
   updateAstroDisplay();
   applyLang();

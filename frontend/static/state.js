@@ -81,6 +81,7 @@ var state = {
   showEquator:  false,  // v6.0.0 — экватор (широта 0°)
   showTropics:  false,  // v6.0.0 — тропики (широта ±TROPIC_LAT)
   showEcliptic: false,  // v6.0.0 — эклиптика (зависит от времени)
+  projMode: 'ae',       // v7.2.0 — 'ae' | 'shilova-r' | 'shilova-l'
   showTimezones: false, // v6.5.0 — часовые пояса
   showTzLabels: false,  // v6.7.1 — подписи смещений на карте (по умолчанию выкл.)
   showTzDial: false,    // v6.7.1 — циферблат по кругу диска (отсчёт от Гринвича)
@@ -128,7 +129,9 @@ var state = {
   showSat: false, showSatNight: true,   // v6.9.0 — вид из космоса
   showPhase: false, realVis: false,   // v7.1.3
   showSeasonMk: false, showTwilight: false,   // v7.1.1
+  rulerSnapTrail: true,   // v7.2.4 — линейка магнитится к пересечениям хвостов с меридианами
   eclipse: { sel: null, showArea: true, showTrack: false },   // v7.1.0
+  transit: { sel: null, showArea: true, showTrack: true, showDisc: true },   // v7.2.1
   observer: { on:false, lat:50.45, lon:30.52, pick:false },   // v6.8.0
 
   ruler: {
@@ -192,12 +195,15 @@ var state = {
      *
      * Единица хранения: [lon, lat] — GeoJSON-порядок.
      * ───────────────────────────────────────────────────── */
+    trailBudget: 0,       // v7.2.3: текущий потолок точек бессрочных хвостов (0 = TRAIL_UNLIM_MAX; снижается на медленных устройствах)
+
     trails: {
 
       /* Солнце — длина в днях, шаг 1 час */
       sun: {
         enabled:   false,   // чекбокс "☀ хвост"
         days:      30,      // слайдер 1..365
+        unlimited: false,   // v7.2.3 — «∞»: без ограничения по времени (до TRAIL_UNLIM_MAX точек)
         // maxPoints = days * 24 — вычисляется динамически
         history:   [],      // [[lon, lat], ...]
       },
@@ -206,6 +212,7 @@ var state = {
       moon: {
         enabled:   false,   // чекбокс "🌙 хвост"
         days:      7,       // слайдер 1..366 (v5.7.0: расширен с 30 до 366)
+        unlimited: false,   // v7.2.3 — «∞»: без ограничения по времени (до TRAIL_UNLIM_MAX точек)
         history:   [],
       },
 
@@ -216,6 +223,7 @@ var state = {
       planets: {
         enabled:   false,   // один чекбокс для всех планет
         days:      90,      // слайдер 1..366
+        unlimited: false,   // v7.2.3 — «∞»: без ограничения по времени (до TRAIL_UNLIM_MAX точек)
         // maxPoints = days * 24 — вычисляется динамически
         history:   {},      // { 'Mercury': [[lon,lat],...], ... }
       },

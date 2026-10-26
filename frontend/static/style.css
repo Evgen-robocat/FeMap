@@ -41,6 +41,9 @@ body, html {
   border-right: 1px solid #1a2a3a;
   padding: 16px;
   overflow-y: auto;
+  overflow-x: hidden;               /* v7.2.5: панель не ездит вбок (на iPhone «болталась» ±30 px) */
+  overscroll-behavior: contain;     /* прокрутка панели не передаётся странице */
+  -webkit-overflow-scrolling: touch;
   z-index: 100;
   display: flex;
   flex-direction: column;

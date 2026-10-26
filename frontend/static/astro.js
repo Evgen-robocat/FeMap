@@ -542,14 +542,63 @@ function initStarTrails() {
  * времени, старше lenMs отбрасывается — длина хвоста не зависит от скорости.
  * Если время пошло назад — история сбрасывается.
  */
-function pushTimed(h, lon, lat, t, sampleMs, lenMs, extra) {
+function pushTimed(h, lon, lat, t, sampleMs, lenMs, extra, maxPts) {
   var n = h.length;
   if (n && h[n - 1][3]) { h.pop(); n--; }
-  if (n && t < h[n - 1][2]) { h.length = 0; n = 0; }
-  if (n === 0 || t - h[n - 1][2] >= sampleMs) h.push([lon, lat, t, 0, extra]);
-  h.push([lon, lat, t, 1, extra]);
+  if (n && t < h[n - 1][2]) { h.length = 0; n = 0; h._seq = 0; h._c = null; }
+  if (h._seq === undefined) h._seq = 0;
+  /* v7.2.2: [lon, lat, t, head, extra, seq] — seq растёт у зафиксированных точек
+     и не меняется при сдвиге окна; по нему хвост режется на куски с кешем path
+     (render.js, trailPaths). У «живой головы» seq = номер следующей точки. */
+  if (n === 0 || t - h[n - 1][2] >= sampleMs) h.push([lon, lat, t, 0, extra, h._seq++]);
+  h.push([lon, lat, t, 1, extra, h._seq]);
   var cut = t - lenMs;
   while (h.length > 2 && h[1][2] < cut) h.shift();
+  if (maxPts && h.length > maxPts) thinTrail(h);          // v7.2.3: бессрочный хвост
+}
+
+/** Текущий потолок точек бессрочного хвоста (снижается автоматически на медленных устройствах). */
+function trailBudget() {
+  return state.astro.trailBudget || TRAIL_UNLIM_MAX;
+}
+
+var _gapEma = 0, _lastDraw = 0;
+/**
+ * v7.2.3: вызывается при каждой отрисованной анимацией порции. Если среднее
+ * время между кадрами больше TRAIL_SLOW_MS и включён «∞» — потолок точек
+ * бессрочных хвостов уменьшается в 1.7 раза (не ниже TRAIL_BUDGET_MIN), старая
+ * часть прореживается: отрисовка длинных хвостов — самая дорогая часть кадра.
+ */
+function trailBudgetTick(now, reset) {
+  if (reset) { _gapEma = 0; _lastDraw = 0; return; }
+  var T = state.astro.trails;
+  if (!((T.sun.enabled && T.sun.unlimited) || (T.planets.enabled && T.planets.unlimited))) { _gapEma = 0; _lastDraw = now; return; }
+  if (_lastDraw) {
+    var g = now - _lastDraw;
+    _gapEma = _gapEma ? _gapEma * 0.65 + g * 0.35 : g;
+    var b = trailBudget();
+    if (_gapEma > TRAIL_SLOW_MS && b > TRAIL_BUDGET_MIN) {
+      b = Math.max(TRAIL_BUDGET_MIN, Math.floor(b * 0.6));
+      state.astro.trailBudget = b;
+      var hs = [T.sun.history].concat(Object.keys(T.planets.history).map(function(k) { return T.planets.history[k]; }));
+      hs.forEach(function(h) { while (h.length > b) thinTrail(h); });
+      _gapEma = 0;
+    }
+  }
+  _lastDraw = now;
+}
+
+/**
+ * v7.2.3: прореживание истории бессрочного хвоста — в старой части остаётся
+ * каждая вторая точка, последние TRAIL_UNLIM_KEEP точек не меняются. Номера
+ * seq у оставшихся точек прежние, кеш path сбрасывается.
+ */
+function thinTrail(h) {
+  var n = h.length, cut = Math.max(0, n - TRAIL_UNLIM_KEEP), w = 0, i;
+  for (i = 0; i < cut; i += 2) h[w++] = h[i];
+  for (i = cut; i < n; i++) h[w++] = h[i];
+  h.length = w;
+  h._c = null;
 }
 
 /** Обрезает историю до lenMs от последней точки (при смене длины хвоста). */
@@ -567,7 +616,8 @@ function appendTrailPoint(key, lon, lat) {
   var trail = state.astro.trails[key];
   if (!trail) return;
   pushTimed(trail.history, lon, lat, state.astro.date.getTime(),
-            TRAIL_SAMPLE_MS.sunMoon, trail.days * 86400000);
+            TRAIL_SAMPLE_MS.sunMoon, trail.unlimited ? Infinity : trail.days * 86400000,
+            undefined, trail.unlimited ? trailBudget() : 0);
 }
 
 /** Добавляет точку в историю конкретной звезды. */
@@ -615,8 +665,9 @@ function appendPlanetTrailPoint(key, lon, lat) {
   var trail = state.astro.trails.planets;
   if (!trail.history[key]) trail.history[key] = [];
   pushTimed(trail.history[key], lon, lat, state.astro.date.getTime(),
-            TRAIL_SAMPLE_MS.planets, trail.days * 86400000,
-            isRetrograde(key, state.astro.date) ? 1 : 0);
+            TRAIL_SAMPLE_MS.planets, trail.unlimited ? Infinity : trail.days * 86400000,
+            isRetrograde(key, state.astro.date) ? 1 : 0,
+            trail.unlimited ? trailBudget() : 0);
 }
 
 /** Добавляет точку в историю хвоста МКС. (v5.8.0) */
@@ -743,7 +794,7 @@ function dayOfYear(date) {
  *   true  — вызван вручную (ползунки, кнопки): history сбрасывается
  *   false — вызван анимацией: history пополняется
  */
-function setAstroDate(date, manual) {
+function setAstroDate(date, manual, noRender) {
   state.astro.date = date;
 
   /* Синхронизируем ползунки */
@@ -794,7 +845,7 @@ function setAstroDate(date, manual) {
     }
   }
 
-  renderAstro(); // определена в render.js
+  if (!noRender) renderAstro(); // определена в render.js (v7.2.2: noRender — пропуск кадров при догоне)
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -820,28 +871,44 @@ function astroPlayMode(mode) {
   state.astro.playMode = mode;
   updatePlayButtons();
 
-  var last = performance.now();
-  state.astro.timer = setInterval(function() {
-    var now = performance.now();
-    var dt  = now - last;
+  /* v7.2.2: цикл на requestAnimationFrame с накоплением времени вместо
+     setInterval. Кадр рисуется не чаще раза в ANIM_INTERVAL_MS; в режимах
+     «24ч» и «звёздные сутки» при задержке (медленное устройство, вкладка была
+     скрыта) пропущенные шаги дописываются в хвосты без перерисовки (не более
+     ANIM_CATCHUP_MAX за кадр), поэтому «дней в секунду» не плавает. */
+  var last = performance.now(), acc = 0;
+  trailBudgetTick(0, true);
+  function frame(now) {
+    if (!state.astro.playing || state.astro.playMode !== mode) return;
+    state.astro.timer = requestAnimationFrame(frame);
+    var dt = Math.max(0, Math.min(now - last, 1000));
     last = now;
-    var stepMs;
-    if (state.astro.playMode === 'speed') {
+    acc += dt;
+    if (acc < ANIM_INTERVAL_MS - 6) return;
+    if (mode === 'speed') {
       /* Реальное прошедшее время × скорость: ×1 = реальное время.
          Скорость читается каждый кадр — меняется на ходу. */
-      stepMs = dt * state.astro.speed;
-    } else {
-      stepMs = ANIM_STEP[state.astro.playMode];
+      var stepMs = acc * state.astro.speed;
+      acc = 0;
+      setAstroDate(new Date(state.astro.date.getTime() + stepMs), false);
+      trailBudgetTick(now);
+      return;
     }
-    setAstroDate(new Date(state.astro.date.getTime() + stepMs), false);
-  }, ANIM_INTERVAL_MS);
+    var k = Math.min(ANIM_CATCHUP_MAX, Math.max(1, Math.floor((acc + 6) / ANIM_INTERVAL_MS)));
+    acc = 0;
+    for (var i = 0; i < k; i++) {
+      setAstroDate(new Date(state.astro.date.getTime() + ANIM_STEP[mode]), false, i < k - 1);
+    }
+    trailBudgetTick(now);
+  }
+  state.astro.timer = requestAnimationFrame(frame);
 }
 
 /**
  * Останавливает анимацию.
  */
 function astroPause() {
-  if (state.astro.timer) { clearInterval(state.astro.timer); state.astro.timer = null; }
+  if (state.astro.timer) { cancelAnimationFrame(state.astro.timer); state.astro.timer = null; }   // v7.2.2
   state.astro.playing  = false;
   state.astro.playMode = null;
   updatePlayButtons();

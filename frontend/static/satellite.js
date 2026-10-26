@@ -86,7 +86,7 @@ function renderSatellite(force) {
   /* v7.1.6: картинки зависят только от центра и размера, а не от времени.
      Ночная сторона — вторая картинка под маской из кругов (меняется каждый кадр,
      но это дешёвый SVG, а не перепроекция текстуры). */
-  var key = [state.lon, state.lat, Math.round(k * 10), Math.round(tr[0]), Math.round(tr[1]), N, night ? 1 : 0].join('|');
+  var key = [state.lon, state.lat, Math.round(k * 10), Math.round(tr[0]), Math.round(tr[1]), N, night ? 1 : 0, state.projMode].join('|');
   if (force || key !== SAT.key) {
     if (SAT.building === key) { satUpdateNightMask(); return; }
     SAT.key = key;
@@ -107,22 +107,26 @@ function satBuildImages(layer, proj, k, tr, R, N, night, key) {
     cvN = document.createElement('canvas'); cvN.width = N; cvN.height = N;
     imgN = cvN.getContext('2d').createImageData(N, N); outN = imgN.data;
   }
-  var DEG = 180 / Math.PI;
+  var DEG = 180 / Math.PI, tw = projTwistSign();
   var pd = [0, 0, 0], pn = [0, 0, 0];
   var t0 = Date.now();
 
   for (var j = 0; j < N; j++) {
     var Y = -((y0 + (j + 0.5) * s) - tr[1]) / k;
     for (var i = 0; i < N; i++) {
-      var X = ((x0 + (i + 0.5) * s) - tr[0]) / k;
+      var X0 = ((x0 + (i + 0.5) * s) - tr[0]) / k, X = X0, Yr = Y;
       var rho = Math.sqrt(X * X + Y * Y);
       var o = (j * N + i) * 4;
       if (rho > Math.PI) continue;                       // альфа 0
+      if (tw) {                                          // v7.2.0: обратная закрутка Шиловой
+        var ta = -tw * Math.acos(Math.min(1, rho / Math.PI)), tc = Math.cos(ta), ts = Math.sin(ta);
+        X = X0 * tc - Y * ts; Yr = X0 * ts + Y * tc;
+      }
       var lam, phi;
       if (rho < 1e-9) { lam = 0; phi = 0; }
       else {
         var sc = Math.sin(rho), cc = Math.cos(rho);
-        var sp = Y * sc / rho;
+        var sp = Yr * sc / rho;
         phi = Math.asin(sp > 1 ? 1 : sp < -1 ? -1 : sp);
         lam = Math.atan2(X * sc, rho * cc);
       }

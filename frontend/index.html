@@ -2,6 +2,17 @@
 <!--
   Файл    : frontend/index.html
   Версия  : 1.15.0 (HTML_V=18)
+  Изменения 7.2.6: cache-bust ?v=726 (config) — только название режима проекции.
+  Изменения 7.2.5: cache-bust ?v=725 (style.css, config, main) — панель #controls не прокручивается
+                   по горизонтали (iPhone), ?dbg=1 — диагностика ширины
+  Изменения 7.2.4: cache-bust ?v=724 (config, state, render, main) — #chk-ruler-trail (магнит
+                   линейки к пересечениям хвоста и меридиана), зум до ×150
+  Изменения 7.2.3: cache-bust ?v=723 (config, state, astro, render, main) — только скрипты:
+                   «∞» у хвостов Солнца, Луны, планет (создаются в main.js)
+  Изменения 7.2.2: cache-bust ?v=722 (config, astro, render) — только скрипты:
+                   кеш хвостов и цикл анимации на requestAnimationFrame
+  Изменения 7.2.1: cache-bust ?v=721 — блок #tr-details «Транзиты» (список, кнопки
+                   Меркурий/Венера, #tr-disc — диск Солнца, #tr-info), static/transit.js
   Изменения 6.4.0: cache-bust ?v=670 — язык выпадающим списком (#lang-select);
                    data-i18n на всех надписях панели (+ data-i18n-title);
                    блок #coords-details (координаты тел); календарь
@@ -35,7 +46,7 @@
   <title>FlatEarthMap</title>
 
   <!-- 1. Стили — первыми чтобы не было мигания -->
-  <link rel="stylesheet" href="/static/style.css?v=717">
+  <link rel="stylesheet" href="/static/style.css?v=725">
 
   <!-- 2. D3.js v7 — до всех map-скриптов, они зависят от d3.* -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
@@ -50,15 +61,17 @@
   <!-- 5. Модули карты — строго в этом порядке:
        config → state → astro → render → main
        Каждый следующий видит глобальные переменные предыдущего -->
-  <script src="/static/config.js?v=719"></script>
-  <script src="/static/state.js?v=719"></script>
-  <script src="/static/astro.js?v=717"></script>
-  <script src="/static/satellite.js?v=717"></script>
+  <script src="/static/config.js?v=726"></script>
+  <script src="/static/projection.js?v=721"></script>
+  <script src="/static/state.js?v=724"></script>
+  <script src="/static/astro.js?v=723"></script>
+  <script src="/static/satellite.js?v=721"></script>
   <script src="/static/eclipse.js?v=717"></script>
-  <script src="/static/events.js?v=717"></script>
+  <script src="/static/transit.js?v=721"></script>
+  <script src="/static/events.js?v=721"></script>
   <script src="/static/phases.js?v=717"></script>
-  <script src="/static/render.js?v=719"></script>
-  <script src="/static/main.js?v=719"></script>
+  <script src="/static/render.js?v=724"></script>
+  <script src="/static/main.js?v=725"></script>
 
 </head>
 <body>
@@ -92,6 +105,15 @@
 
     <button id="btn-apply" class="btn-primary" data-i18n="applyBtn">▶ Применить центр</button>
 
+    <div class="control-group">
+      <label for="sel-proj" data-i18n="projLabel">Проекция</label>
+      <select id="sel-proj" class="lang-select" style="width:100%">
+        <option value="ae" data-i18n="projAE">Азимутальная равнопромежуточная</option>
+        <option value="shilova-r" data-i18n="projShR">Карта с изогнутыми меридианами ↻</option>
+        <option value="shilova-l" data-i18n="projShL">Карта с изогнутыми меридианами ↺</option>
+      </select>
+    </div>
+
     <div class="presets">
       <button class="btn-preset" data-lat="90"  data-lon="0"  data-i18n="presetN">Сев. полюс</button>
       <button class="btn-preset" data-lat="-90" data-lon="0"  data-i18n="presetS">Юж. полюс</button>
@@ -121,6 +143,11 @@
         <input type="checkbox" id="chk-ruler">
         <span class="checkbox-custom"></span>
         <span data-i18n="rulerChk">📏 Линейка расстояний</span>
+      </label>
+      <label class="checkbox-label" style="margin-left:18px;">
+        <input type="checkbox" id="chk-ruler-trail" checked>
+        <span class="checkbox-custom"></span>
+        <span data-i18n="rulerTrailChk">🧲 магнит линейки: хвост × меридиан</span>
       </label>
       <!-- Маршруты рейсов — дуги великого круга -->
       <label class="checkbox-label">
@@ -360,6 +387,38 @@
           <span data-i18n="eclTrackChk">След (линия центра)</span>
         </label>
       </details>
+      <!-- v7.2.1: блок «Транзиты» -->
+      <details id="tr-details" style="margin-bottom:4px;">
+        <summary data-i18n="trTitle" style="cursor:pointer; font-size:0.85rem; color:#a0d8ef;">☿♀ Транзиты по диску Солнца</summary>
+        <select id="tr-list" style="width:100%; box-sizing:border-box; margin:5px 0; border-radius:6px;
+                background:#0d1a26; color:#e0e6ed; border:1px solid #253545; padding:5px; font-size:11px;"></select>
+        <div style="display:flex; gap:4px; margin-bottom:3px;">
+          <button id="btn-tr-prev-mer" class="btn-preset" style="flex:1;padding:5px 2px;font-size:10px;" data-i18n="trPrevMer">◀ Меркурий</button>
+          <button id="btn-tr-next-mer" class="btn-preset" style="flex:1;padding:5px 2px;font-size:10px;" data-i18n="trNextMer">Меркурий ▶</button>
+        </div>
+        <div style="display:flex; gap:4px; margin-bottom:3px;">
+          <button id="btn-tr-prev-ven" class="btn-preset" style="flex:1;padding:5px 2px;font-size:10px;" data-i18n="trPrevVen">◀ Венера</button>
+          <button id="btn-tr-next-ven" class="btn-preset" style="flex:1;padding:5px 2px;font-size:10px;" data-i18n="trNextVen">Венера ▶</button>
+        </div>
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-tr-area" checked>
+          <span class="checkbox-custom"></span>
+          <span data-i18n="trAreaChk">Карта видимости (начало → конец)</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-tr-track" checked>
+          <span class="checkbox-custom"></span>
+          <span data-i18n="trTrackChk">Путь Солнца в зените, C1 / макс. / C4</span>
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="chk-tr-disc" checked>
+          <span class="checkbox-custom"></span>
+          <span data-i18n="trDiscChk">Диск Солнца с путём планеты</span>
+        </label>
+      </details>
+      <div id="tr-disc" style="display:none;"></div>
+      <div id="tr-info" style="font-family:monospace; font-size:10px; color:#f0d8a0;
+           text-align:center; white-space:pre-line; min-height:12px; margin-bottom:6px;"></div>
       <div id="ecl-info" style="font-family:monospace; font-size:10px; color:#c8d8f0;
            text-align:center; min-height:12px; margin-bottom:6px;"></div>
       <div id="observer-info" style="font-family:monospace; font-size:10px; color:#8fe3f0;

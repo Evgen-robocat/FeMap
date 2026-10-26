@@ -142,7 +142,7 @@ function createSVG() {
   // milkyway (v5.9.0): над ночной тенью, под маршрутами и рамкой диска.
   // zodiac, ecliptic, lines (v6.0.0): над Млечным Путём; lines — экватор
   // и тропики, поверх остальных слоёв неба.
-  ['water','land','sat','borders','grid','timezones','night','milkyway','zodiac','ecliptic','eclipse','shadow','observer','lines',
+  ['water','land','sat','borders','grid','timezones','night','milkyway','zodiac','ecliptic','eclipse','transit','shadow','observer','lines',
    'routes','border'].forEach(function(id) {
     mc.append('g').attr('id', 'layer-' + id);
   });
@@ -154,7 +154,7 @@ function createSVG() {
   // layer-iss добавлен между layer-planets и layer-stars (v5.8.0)
   [
     'labels','zlabels','cities','ruler',
-    'trail-sun','trail-moon','trail-stars','trail-planets','trail-iss','shadow-mk','observer-mk','mw-mark','season-mk','phase-mk',
+    'trail-sun','trail-moon','trail-stars','trail-planets','trail-iss','shadow-mk','observer-mk','mw-mark','season-mk','transit-mk','phase-mk',
     'sun','moon','planets','iss','stars'
   ].forEach(function(id) {
     state.svg.append('g').attr('id', 'layer-' + id);
@@ -178,7 +178,7 @@ function createSVG() {
 
 function setupZoom() {
   state.zoom = d3.zoom()
-    .scaleExtent([0.3, 50])
+    .scaleExtent([0.3, ZOOM_MAX])   // v7.2.4: 50 → 150
     .on('zoom', function(event) {
       state.svg.select('#map-content').attr('transform', event.transform);
       renderLabels();
@@ -215,8 +215,7 @@ function resetZoom() {
 function buildProjection() {
   var w = state.width  || window.innerWidth  || 300;
   var h = state.height || window.innerHeight || 300;
-  state.projection = d3.geoAzimuthalEquidistant()
-    .rotate([-state.lon, -state.lat])
+  state.projection = makeProjection([-state.lon, -state.lat])   // v7.2.0: AE или Шилова
     .fitSize([w, h], { type: 'Sphere' })
     .clipAngle(179.9);
   state.path = d3.geoPath(state.projection);
@@ -400,7 +399,7 @@ function renderTimezones(force) {
     return;
   }
   tzUpdateOffsets(state.astro.date);
-  var key = state.lon + ',' + state.lat + ',' + state.width + 'x' + state.height + '|' + tz.offSig;
+  var key = state.projMode + '|' + state.lon + ',' + state.lat + ',' + state.width + 'x' + state.height + '|' + tz.offSig;
   if (!force && key === tz.key) return;
   tz.key = key; tz.drawn = true;
   layer.selectAll('*').remove();
@@ -731,14 +730,13 @@ function skyFrame() {
 
   var key = [
     state.lon, state.lat, gst.toFixed(4),
-    scale.toFixed(2), tr[0].toFixed(1), tr[1].toFixed(1)
+    scale.toFixed(2), tr[0].toFixed(1), tr[1].toFixed(1), state.projMode
   ].join('|');
 
   var f = state.skyFrame;
   if (f.key !== key) {
     f.key  = key;
-    f.proj = d3.geoAzimuthalEquidistant()
-      .rotate([-state.lon - gst, -state.lat])
+    f.proj = makeProjection([-state.lon - gst, -state.lat])
       .scale(scale)
       .translate(tr)
       .clipAngle(179.9);
@@ -1370,69 +1368,187 @@ function renderTrailPath(layerId, history, color, bands, maxOpacity, style) {
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   КЕШ ХВОСТОВ (v7.2.2)
+   История режется на куски по TRAIL_CHUNK точек (по seq, он не меняется при
+   сдвиге окна). Для каждого законченного куска готовая строка path хранится в
+   history._c и пересчитывается только при смене проекции / центра / зума /
+   размера карты. Каждый кадр считается лишь последний кусок (≤ TRAIL_CHUNK
+   точек вместе с «живой головой»), поэтому цена кадра не растёт с длиной хвоста.
+═══════════════════════════════════════════════════════════════ */
+var TRAIL_CHUNK = 32;
+var _trailCtx = null;
+
+function trailCtx() {
+  if (_trailCtx) return _trailCtx;
+  var tr = d3.zoomTransform(state.svg.node()), pr = state.projection;
+  var path = d3.geoPath({
+    stream: function(s) {
+      return pr.stream({
+        point: function(x, y) { var pt = tr.apply([x, y]); s.point(pt[0], pt[1]); },
+        lineStart:    function() { s.lineStart();    },
+        lineEnd:      function() { s.lineEnd();      },
+        polygonStart: function() { s.polygonStart(); },
+        polygonEnd:   function() { s.polygonEnd();   },
+        sphere:       function() { if (s.sphere) s.sphere(); }
+      });
+    }
+  }).digits(1);
+  _trailCtx = {
+    path: path,
+    sig: [state.projMode, pr.rotate().join(','), pr.scale(), pr.translate().join(','),
+          tr.k, tr.x.toFixed(2), tr.y.toFixed(2), state.width, state.height].join('|')
+  };
+  return _trailCtx;
+}
+
+/** Строка path для куска точек: два набора подпутей — обычный и ретроградный. */
+function trailChunkPath(prev, pts, ctx) {
+  var out = { n: '', r: '' };
+  var all = prev ? [prev].concat(pts) : pts;
+  if (all.length < 2) return out;
+  var run = [all[0]], flag = all[0][4] ? 1 : 0;
+  function flush() {
+    if (run.length < 2) return;
+    var coords = densifyTrail(run.map(function(p) { return [p[0], p[1]]; }), TRAIL_SMOOTH_STEP);
+    var d = ctx.path({ type: 'LineString', coordinates: coords });
+    if (d) { if (flag) out.r += d; else out.n += d; }
+  }
+  for (var i = 1; i < all.length; i++) {
+    var f = all[i][4] ? 1 : 0;
+    if (f !== flag) { var last = run[run.length - 1]; flush(); run = [last]; flag = f; }
+    run.push(all[i]);
+  }
+  flush();
+  return out;
+}
+
+/**
+ * Path хвоста, разделённый на «устоявшуюся» часть (все куски, кроме последнего)
+ * и «живую» (последний кусок с головой): { sn, sr, ln, lr } — обычные (n) и
+ * ретроградные (r) подпути. Склейка устоявшейся части кешируется и пересобирается
+ * только когда меняется набор кусков (раз в TRAIL_CHUNK шагов или при сдвиге окна).
+ */
+function trailPaths(h) {
+  var ctx = trailCtx(), c = h._c;
+  if (!c || c.sig !== ctx.sig) c = h._c = { sig: ctx.sig, ch: {}, cnt: 0, skey: null };
+  var CH = TRAIL_CHUNK, n = h.length, G = [], i = 0, j, id;
+  while (i < n) {                                   // границы кусков
+    id = Math.floor(h[i][5] / CH); j = i;
+    while (j < n && Math.floor(h[j][5] / CH) === id) j++;
+    G.push([id, i, j]); i = j;
+  }
+  var last = G[G.length - 1], g0 = G[0];
+  var skey = G.length + ':' + g0[0] + ':' + (g0[2] - g0[1]) + ':' + h[g0[1]][5] + ':' + last[0];
+  if (c.skey !== skey) {
+    var sn = '', sr = '';
+    for (var k = 0; k < G.length - 1; k++) {
+      var g = G[k], prev = k ? h[G[k - 1][2] - 1] : null, ps = prev ? prev[5] : -1;
+      var e = c.ch[g[0]];
+      if (!(e && e.n === g[2] - g[1] && e.f === h[g[1]][5] && e.p === ps)) {
+        if (!e) c.cnt++;
+        e = c.ch[g[0]] = { n: g[2] - g[1], f: h[g[1]][5], p: ps,
+                           d: trailChunkPath(prev, h.slice(g[1], g[2]), ctx) };
+      }
+      sn += e.d.n; sr += e.d.r;
+    }
+    c.skey = skey; c.sn = sn; c.sr = sr;
+    if (c.cnt > G.length + 4) {                     // чистим куски, ушедшие за окно хвоста
+      for (var key in c.ch) if (+key < g0[0]) { delete c.ch[key]; c.cnt--; }
+    }
+  }
+  var lp = G.length > 1 ? h[G[G.length - 2][2] - 1] : null;
+  var ld = trailChunkPath(lp, h.slice(last[1], last[2]), ctx);
+  return { sn: c.sn, sr: c.sr, ln: ld.n, lr: ld.r };
+}
+
+/** Слой хвостов: постоянные path-элементы; кадр помечается, неиспользованные убираются. */
+function trailLayer(layerId) {
+  var node = state.svg.select('#' + layerId).node();
+  if (!node) return null;
+  var L = node.__tl || (node.__tl = { els: {}, frame: 0, node: node });
+  L.frame++;
+  return L;
+}
+
+function trailEl(L, id, color, width, dash, d) {
+  var el = L.els[id];
+  if (!el) {
+    el = L.els[id] = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    el.setAttribute('fill', 'none');
+    el.setAttribute('stroke-width', width);
+    if (dash) el.setAttribute('stroke-dasharray', dash);
+    el.setAttribute('stroke-linecap', 'round');
+    el.setAttribute('stroke-linejoin', 'round');
+    el.setAttribute('opacity', TRAIL_OPACITY);
+    el.setAttribute('pointer-events', 'none');
+  }
+  if (el.parentNode !== L.node) { L.node.appendChild(el); el.__d = null; }
+  if (el.__c !== color) { el.setAttribute('stroke', color); el.__c = color; }
+  if (el.__d !== d) { el.setAttribute('d', d); el.__d = d; }
+  el.__f = L.frame;
+}
+
+function trailSweep(L) {
+  if (!L) return;
+  for (var id in L.els) {
+    if (L.els[id].__f !== L.frame) {
+      var el = L.els[id];
+      if (el.parentNode) el.parentNode.removeChild(el);
+      delete L.els[id];
+    }
+  }
+}
+
+/** Рисует хвост из кеша: устоявшаяся и живая части × (обычный, ретроградный пунктиром). */
+function renderTrailCached(L, key, h, color) {
+  if (!L || !h || h.length < 2) return;
+  var d = trailPaths(h), W = TRAIL_WIDTH, RW = TRAIL_RETRO_WIDTH, RD = TRAIL_RETRO_DASH;
+  if (d.sn) trailEl(L, key + '|sn', color, W, null, d.sn);
+  if (d.sr) trailEl(L, key + '|sr', color, RW, RD, d.sr);
+  if (d.ln) trailEl(L, key + '|ln', color, W, null, d.ln);
+  if (d.lr) trailEl(L, key + '|lr', color, RW, RD, d.lr);
+}
+
 function renderSunTrail() {
-  var layer = state.svg.select('#layer-trail-sun');
-  layer.selectAll('*').remove();
-  var t = state.astro.trails.sun;
-  if (!t.enabled || !state.astro.showSun) return;
-  renderTrailPolyline('layer-trail-sun', t.history, '#fbbf24', TRAIL_BANDS.sunMoon, 0.70);
+  var L = trailLayer('layer-trail-sun'), t = state.astro.trails.sun;
+  if (t.enabled && state.astro.showSun) renderTrailCached(L, 'sun', t.history, '#fbbf24');
+  trailSweep(L);
 }
 
 /**
  * Хвост Луны через renderTrailPath (дуги большого круга, v5.7.0).
  */
 function renderMoonTrail() {
-  var layer = state.svg.select('#layer-trail-moon');
-  layer.selectAll('*').remove();
-  var t = state.astro.trails.moon;
-  if (!t.enabled || !state.astro.showMoon) return;
-  renderTrailPath('layer-trail-moon', t.history, '#8ab4e0', TRAIL_BANDS.sunMoon, 0.65);
+  var L = trailLayer('layer-trail-moon'), t = state.astro.trails.moon;
+  if (t.enabled && state.astro.showMoon) renderTrailCached(L, 'moon', t.history, '#8ab4e0');
+  trailSweep(L);
 }
 
 /**
  * Хвосты всех звёзд.
  */
 function renderStarTrails() {
-  var layer = state.svg.select('#layer-trail-stars');
-  layer.selectAll('*').remove();
-  var t = state.astro.trails.stars;
-  if (!t.enabled || !state.astro.showStars) return;
-
-  for (var i = 0; i < STARS.length; i++) {
-    if (!t.history[i] || t.history[i].length < 2) continue;
-    renderTrailPolyline('layer-trail-stars', t.history[i],
-      STARS[i].color, TRAIL_BANDS.stars, 0.55);
+  var L = trailLayer('layer-trail-stars'), t = state.astro.trails.stars;
+  if (t.enabled && state.astro.showStars) {
+    for (var i = 0; i < STARS.length; i++) renderTrailCached(L, 's' + i, t.history[i], STARS[i].color);
   }
+  trailSweep(L);
 }
 
 /**
  * Хвосты всех планет через renderTrailPath (v5.7.0).
  */
 function renderPlanetTrails() {
-  var layer = state.svg.select('#layer-trail-planets');
-  layer.selectAll('*').remove();
-  var t = state.astro.trails.planets;
-  if (!t.enabled || !state.astro.showPlanets) return;
-
-  PLANETS.forEach(function(pl) {
-    if (!planetOn(pl.key)) return;
-    var h = t.history[pl.key];
-    if (!h || h.length < 2) return;
-    /* v7.0.0: ретроградные участки — жирным штрихом */
-    var run = [], flag = null;
-    function flush() {
-      if (run.length > 1) {
-        renderTrailPath('layer-trail-planets', run, pl.color, 1, 1,
-          flag ? { dash: TRAIL_RETRO_DASH, width: TRAIL_RETRO_WIDTH } : null);
-      }
-    }
-    h.forEach(function(p) {
-      var f = p[4] ? 1 : 0;
-      if (flag !== null && f !== flag) { var last = run[run.length - 1]; flush(); run = [last]; }
-      flag = f; run.push(p);
+  var L = trailLayer('layer-trail-planets'), t = state.astro.trails.planets;
+  if (t.enabled && state.astro.showPlanets) {
+    PLANETS.forEach(function(pl) {
+      if (!planetOn(pl.key)) return;
+      /* v7.0.0: ретроградные участки — жирным штрихом (внутри renderTrailCached) */
+      renderTrailCached(L, pl.key, t.history[pl.key], pl.color);
     });
-    flush();
-  });
+  }
+  trailSweep(L);
 }
 
 /**
@@ -1442,18 +1558,16 @@ function renderPlanetTrails() {
  * дуги могут быть заметными, поэтому используем geoPath а не polyline.
  */
 function renderIssTrail() {
-  var layer = state.svg.select('#layer-trail-iss');
-  layer.selectAll('*').remove();
-  var t = state.astro.trails.iss;
-  if (!t.enabled || !state.astro.showIss) return;
-  if (!t.history || t.history.length < 2) return;
-  renderTrailPath('layer-trail-iss', t.history, '#00ff88', TRAIL_BANDS.iss, 0.70);
+  var L = trailLayer('layer-trail-iss'), t = state.astro.trails.iss;
+  if (t.enabled && state.astro.showIss) renderTrailCached(L, 'iss', t.history, '#00ff88');
+  trailSweep(L);
 }
 
 /**
  * Диспетчер всех хвостов. Вызывается из renderAstro().
  */
 function renderTrails() {
+  _trailCtx = null;       // v7.2.2: контекст проекции/зума пересоздаётся раз за кадр
   renderSunTrail();
   renderMoonTrail();
   renderStarTrails();
@@ -1687,6 +1801,7 @@ function renderAstro() {
   renderZodiac();   // v6.0.0
   renderEcliptic(); // v6.0.0
   renderEclipse();  // v7.1.0
+  renderTransit();  // v7.2.1
   renderSeasons();  // v7.1.1
   renderShadow();   // v6.6.0
   renderObserver(); // v6.8.0
@@ -1694,9 +1809,7 @@ function renderAstro() {
   renderTopInfo();  // v7.1.1
 
   /* Очищаем хвостовые слои */
-  ['trail-sun','trail-moon','trail-stars','trail-planets','trail-iss'].forEach(function(id) {
-    state.svg.select('#layer-' + id).selectAll('*').remove();
-  });
+  /* v7.2.3: хвосты (layer-trail-*) не очищаются — это делает renderTrails() через trailSweep() */
 
   /* Очищаем маркерные слои */
   ['sun','moon','planets','iss','stars'].forEach(function(id) {

@@ -74,6 +74,8 @@ function renderTopInfo() {
   var act = eclipseActive(d);
   if (act.solar) lines.push('☀ ' + t.eclSolarName + ' — ' + t.eclNow);
   if (act.lunar) lines.push('🌙 ' + t.eclLunarName + ' — ' + t.eclNow);
+  var tra = transitActive(d);                                  // v7.2.1
+  if (tra) lines.push(TR_BODIES[tra.body].sym + ' ' + trName(tra) + ' — ' + t.eclNow);
   if (A.showNodes) {
     var np = moonNodePass(d);
     if (np) lines.push('⚠ ' + t.moonAtNode + ' ' + (np.which === 'rahu' ? '☊ ' + t.rahu : '☋ ' + t.ketu));
