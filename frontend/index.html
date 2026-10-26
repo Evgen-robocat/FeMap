@@ -2,6 +2,7 @@
 <!--
   Файл    : frontend/index.html
   Версия  : 1.15.0 (HTML_V=18)
+  Изменения 7.2.7: cache-bust ?v=727 (config, render) — зум/сдвиг не сбрасываются при изменении размера окна.
   Изменения 7.2.6: cache-bust ?v=726 (config) — только название режима проекции.
   Изменения 7.2.5: cache-bust ?v=725 (style.css, config, main) — панель #controls не прокручивается
                    по горизонтали (iPhone), ?dbg=1 — диагностика ширины
@@ -61,7 +62,7 @@
   <!-- 5. Модули карты — строго в этом порядке:
        config → state → astro → render → main
        Каждый следующий видит глобальные переменные предыдущего -->
-  <script src="/static/config.js?v=726"></script>
+  <script src="/static/config.js?v=727"></script>
   <script src="/static/projection.js?v=721"></script>
   <script src="/static/state.js?v=724"></script>
   <script src="/static/astro.js?v=723"></script>
@@ -70,7 +71,7 @@
   <script src="/static/transit.js?v=721"></script>
   <script src="/static/events.js?v=721"></script>
   <script src="/static/phases.js?v=717"></script>
-  <script src="/static/render.js?v=724"></script>
+  <script src="/static/render.js?v=727"></script>
   <script src="/static/main.js?v=725"></script>
 
 </head>

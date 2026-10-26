@@ -164,10 +164,20 @@ function createSVG() {
   new ResizeObserver(function() {
     var w = container.clientWidth, h = container.clientHeight;
     if (Math.abs(w - state.width) < 2 && Math.abs(h - state.height) < 2) return;
+    // v7.2.7: зум и сдвиг больше не сбрасываются при изменении размера (на телефоне
+    // адресная строка браузера скрывается/появляется и меняет высоту): сохраняем
+    // масштаб и точку карты в центре экрана, проекция центрируется в w/2,h/2.
+    var ow = state.width, oh = state.height;
+    var tr0 = d3.zoomTransform(state.svg.node());
     state.width = w; state.height = h;
     state.svg.attr('width', w).attr('height', h);
-    clearZoomTransform();
     buildProjection();
+    if (ow && oh && state.zoom && (tr0.k !== 1 || tr0.x !== 0 || tr0.y !== 0)) {
+      var cp = tr0.invert([ow / 2, oh / 2]);                       // точка под центром (старые координаты)
+      var np = [cp[0] + (w - ow) / 2, cp[1] + (h - oh) / 2];        // она же в новой проекции
+      state.svg.call(state.zoom.transform,
+        d3.zoomIdentity.translate(w / 2 - tr0.k * np[0], h / 2 - tr0.k * np[1]).scale(tr0.k));
+    }
     render();
   }).observe(container);
 }
