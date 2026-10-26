@@ -101,7 +101,7 @@
 
 'use strict';
 
-var VERSION = window.FEMAP_VERSION || '7.2.7';
+var VERSION = window.FEMAP_VERSION || '7.2.8';
 
 /* v6.9.0: «Вид из космоса» */
 /* v7.0.0: хвосты — яркие, без градиента */

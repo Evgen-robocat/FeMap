@@ -2,6 +2,7 @@
 <!--
   Файл    : frontend/index.html
   Версия  : 1.15.0 (HTML_V=18)
+  Изменения 7.2.8: cache-bust ?v=728 (style, config) — слои карты pointer-events:none, щипок зума на ночной стороне.
   Изменения 7.2.7: cache-bust ?v=727 (config, render) — зум/сдвиг не сбрасываются при изменении размера окна.
   Изменения 7.2.6: cache-bust ?v=726 (config) — только название режима проекции.
   Изменения 7.2.5: cache-bust ?v=725 (style.css, config, main) — панель #controls не прокручивается
@@ -47,7 +48,7 @@
   <title>FlatEarthMap</title>
 
   <!-- 1. Стили — первыми чтобы не было мигания -->
-  <link rel="stylesheet" href="/static/style.css?v=725">
+  <link rel="stylesheet" href="/static/style.css?v=728">
 
   <!-- 2. D3.js v7 — до всех map-скриптов, они зависят от d3.* -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
@@ -62,7 +63,7 @@
   <!-- 5. Модули карты — строго в этом порядке:
        config → state → astro → render → main
        Каждый следующий видит глобальные переменные предыдущего -->
-  <script src="/static/config.js?v=727"></script>
+  <script src="/static/config.js?v=728"></script>
   <script src="/static/projection.js?v=721"></script>
   <script src="/static/state.js?v=724"></script>
   <script src="/static/astro.js?v=723"></script>
