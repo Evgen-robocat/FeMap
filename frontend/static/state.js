@@ -126,7 +126,7 @@ var state = {
 
   /* ── Линейка ───────────────────────────────────────────── */
   showRings: false, ringFillSun: true, ringFillMoon: true,   // v7.1.5 — круги видимости отдельно от наблюдателя
-  showSat: false, showSatNight: true,   // v6.9.0 — вид из космоса
+  showSat: false, showSatNight: true, showSatClouds: false,   // v6.9.0 — вид из космоса
   showPhase: false, realVis: false,   // v7.1.3
   showSeasonMk: false, showTwilight: false,   // v7.1.1
   rulerSnapTrail: true,   // v7.2.4 — линейка магнитится к пересечениям хвостов с меридианами

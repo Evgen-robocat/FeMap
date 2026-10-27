@@ -101,9 +101,9 @@
 
 'use strict';
 
-var VERSION = window.FEMAP_VERSION || '7.2.8';
+var VERSION = window.FEMAP_VERSION || '7.2.11';
 
-/* v6.9.0: «Вид из космоса» */
+/* v6.9.0: «Фото-слой» (раньше «Вид из космоса») */
 /* v7.0.0: хвосты — яркие, без градиента */
 var TRAIL_OPACITY = 0.92;
 var TRAIL_WIDTH   = 2.4;
@@ -117,6 +117,8 @@ var NODE_PASS_DEG = 1.5;       // Луна ближе этого к узлу —
 
 var SAT_DAY_URL   = '/data/earth_day.jpg?v=690';
 var SAT_NIGHT_URL = '/data/earth_night.jpg?v=690';
+var SAT_DAYCLOUDS_URL = '/data/earth_day_clouds.jpg?v=7211';   // v7.2.11: цветной снимок с облаками (NASA Blue Marble), заменяет дневную текстуру
+var SAT_TEX_MAXW  = 4096;   // текстуры шире этого уменьшаются при загрузке
 var SAT_MAX_PX    = 1200;   // сторона перепроецированной картинки, px
 
 /* ═══════════════════════════════════════════════════════════════
@@ -343,7 +345,7 @@ var LANG = {
     tzLoading:'Загрузка часовых поясов…', errTz:'Ошибка загрузки часовых поясов',
     shadowChk:'🌑 Чёрное солнце (Умбра / Пенумбра)', nodesChk:'☊☋ Узлы Луны (Раху / Кету)',   // v6.6.0
     shadowName:'Чёрное солнце', shadowUmbra:'умбра', shadowPenumbra:'пенумбра',
-    satChk:'🛰 Вид из космоса (NASA)', satNightChk:'🌃 ночь и огни городов', satCredit:'Текстуры: Solar System Scope, CC BY 4.0 (данные NASA)', errSat:'Не удалось загрузить текстуры Земли',   // v6.9.0
+    satChk:'📷 Фото-слой', satNightChk:'🌃 ночь и огни городов', satCloudsChk:'☁ облака (статичный снимок)', errSatClouds:'Не удалось загрузить снимок с облаками (data/earth_day_clouds.jpg)', satCredit:'Текстуры: Solar System Scope, CC BY 4.0 (данные NASA)', errSat:'Не удалось загрузить текстуры Земли',   // v6.9.0
     retroTxt:'ретроградная', sgrName:'Sgr A* — центр Галактики', moonAtNode:'Луна проходит', shadowCoordsName:'Тень Земли', speedDeg:'15°/с (1 ч за 1 с)',   // v7.0.0
     trailInfTitle:'Без ограничения по времени: хвост растёт, старая часть прореживается (до нескольких тысяч точек; на медленных устройствах потолок снижается сам)',   // v7.2.3
     trTitle:'☿♀ Транзиты по диску Солнца', trPick:'— выбрать транзит —', trPrevMer:'◀ Меркурий', trNextMer:'Меркурий ▶', trPrevVen:'◀ Венера', trNextVen:'Венера ▶', trAreaChk:'Карта видимости (начало → конец)', trTrackChk:'Путь Солнца в зените, C1 / макс. / C4', trDiscChk:'Диск Солнца с путём планеты', trMercury:'Транзит Меркурия', trVenus:'Транзит Венеры', trMax:'макс.', trC1:'C1', trC4:'C4', trH:'ч', trMin:'мин', trSep:'мин. расстояние от центра:', trObs_full:'видно полностью', trObs_part:'видно частично', trObs_none:'не видно (Солнце под горизонтом)',   // v7.2.1
@@ -423,7 +425,7 @@ var LANG = {
     tzLoading:'Loading time zones…', errTz:'Time zone load error',
     shadowChk:'🌑 Black Sun (Umbra / Penumbra)', nodesChk:'☊☋ Lunar nodes (Rahu / Ketu)',   // v6.6.0
     shadowName:'Black Sun', shadowUmbra:'umbra', shadowPenumbra:'penumbra',
-    satChk:'🛰 View from space (NASA)', satNightChk:'🌃 night side & city lights', satCredit:'Textures: Solar System Scope, CC BY 4.0 (NASA data)', errSat:'Could not load Earth textures',   // v6.9.0
+    satChk:'📷 Photo layer', satNightChk:'🌃 night side & city lights', satCloudsChk:'☁ clouds (static snapshot)', errSatClouds:'Could not load the cloudy Earth image (data/earth_day_clouds.jpg)', satCredit:'Textures: Solar System Scope, CC BY 4.0 (NASA data)', errSat:'Could not load Earth textures',   // v6.9.0
     retroTxt:'retrograde', sgrName:'Sgr A* — Galactic centre', moonAtNode:'Moon passes', shadowCoordsName:'Earth\'s shadow', speedDeg:'15°/s (1 h per 1 s)',   // v7.0.0
     trailInfTitle:'No time limit: the trail keeps growing, its older part is thinned out (up to a few thousand points; lowered automatically on slow devices)',   // v7.2.3
     trTitle:'☿♀ Transits across the Sun', trPick:'— pick a transit —', trPrevMer:'◀ Mercury', trNextMer:'Mercury ▶', trPrevVen:'◀ Venus', trNextVen:'Venus ▶', trAreaChk:'Visibility map (start → end)', trTrackChk:'Sun-at-zenith path, C1 / max / C4', trDiscChk:'Solar disc with the planet path', trMercury:'Transit of Mercury', trVenus:'Transit of Venus', trMax:'max', trC1:'C1', trC4:'C4', trH:'h', trMin:'min', trSep:'min. distance from centre:', trObs_full:'visible throughout', trObs_part:'partly visible', trObs_none:'not visible (Sun below horizon)',   // v7.2.1
@@ -503,7 +505,7 @@ var LANG = {
     tzLoading:'Zeitzonen werden geladen…', errTz:'Fehler beim Laden der Zeitzonen',
     shadowChk:'🌑 Schwarze Sonne (Umbra / Penumbra)', nodesChk:'☊☋ Mondknoten (Rahu / Ketu)',   // v6.6.0
     shadowName:'Schwarze Sonne', shadowUmbra:'Kernschatten', shadowPenumbra:'Halbschatten',
-    satChk:'🛰 Blick aus dem All (NASA)', satNightChk:'🌃 Nachtseite & Stadtlichter', satCredit:'Texturen: Solar System Scope, CC BY 4.0 (NASA-Daten)', errSat:'Erdtexturen konnten nicht geladen werden',   // v6.9.0
+    satChk:'📷 Foto-Ebene', satNightChk:'🌃 Nachtseite & Stadtlichter', satCloudsChk:'☁ Wolken (statisches Bild)', errSatClouds:'Wolkenbild konnte nicht geladen werden (data/earth_day_clouds.jpg)', satCredit:'Texturen: Solar System Scope, CC BY 4.0 (NASA-Daten)', errSat:'Erdtexturen konnten nicht geladen werden',   // v6.9.0
     retroTxt:'rückläufig', sgrName:'Sgr A* — Galaktisches Zentrum', moonAtNode:'Mond passiert', shadowCoordsName:'Erdschatten', speedDeg:'15°/s (1 h pro 1 s)',   // v7.0.0
     trailInfTitle:'Ohne Zeitlimit: die Spur wächst, der ältere Teil wird ausgedünnt (bis zu einigen tausend Punkten; auf langsamen Geräten automatisch weniger)',   // v7.2.3
     trTitle:'☿♀ Transite vor der Sonne', trPick:'— Transit wählen —', trPrevMer:'◀ Merkur', trNextMer:'Merkur ▶', trPrevVen:'◀ Venus', trNextVen:'Venus ▶', trAreaChk:'Sichtbarkeitskarte (Anfang → Ende)', trTrackChk:'Spur des Sonnen-Zenits, C1 / Max. / C4', trDiscChk:'Sonnenscheibe mit Planetenbahn', trMercury:'Merkurtransit', trVenus:'Venustransit', trMax:'Max.', trC1:'C1', trC4:'C4', trH:'Std.', trMin:'Min.', trSep:'min. Abstand vom Zentrum:', trObs_full:'ganz sichtbar', trObs_part:'teilweise sichtbar', trObs_none:'nicht sichtbar (Sonne unter dem Horizont)',   // v7.2.1

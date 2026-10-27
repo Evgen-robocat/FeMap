@@ -1036,6 +1036,11 @@ async function init() {
     state.showSatNight = e.target.checked;
     renderSatellite(true);
   });
+  /* v7.2.11: цветной снимок с облаками вместо дневной текстуры (по умолчанию выключен) */
+  document.getElementById('chk-sat-clouds').addEventListener('change', function(e) {
+    state.showSatClouds = e.target.checked;
+    renderSatellite(true);
+  });
 
   /* v6.8.0: наблюдатель */
   (function() {

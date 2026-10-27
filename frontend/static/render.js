@@ -254,7 +254,7 @@ function render() {
 
   var lb = state.svg.select('#layer-borders');
   lb.selectAll('*').remove();
-  if (state.borders && !state.showSat) {      // v7.1.7: поверх картинки из космоса границ нет
+  if (state.borders && !state.showSat) {      // v7.1.7: поверх фото-слоя границ нет
     lb.selectAll('path').data(state.borders.features).join('path')
       .attr('d', state.path).attr('fill', 'none')
       .attr('stroke', COLORS.borders).attr('stroke-width', 0.6);

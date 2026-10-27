@@ -1,22 +1,23 @@
 /**
  * satellite.js — v6.9.0
- * «Вид из космоса»: дневная текстура Земли (и ночная с огнями городов)
+ * «Фото-слой» (бывш. «Вид из космоса»): дневная текстура Земли (и ночная с огнями городов)
  * перепроецируется в текущую азимутальную равноудалённую проекцию с любым
  * центром. Текстуры: Solar System Scope, CC BY 4.0 (на основе данных NASA).
  * Результат — одно изображение в слое #layer-sat (внутри map-content, поэтому
  * зум/панорама бесплатны). Перерисовка — только при смене центра, размера
  * или (с ночной стороной) положения Солнца более чем на 0.25°.
  */
-var SAT = { day: null, night: null, loading: false, key: '', drawn: false,
+var SAT = { day: null, night: null, dayc: null, dayCLoading: false, dayCFailed: false, loading: false, key: '', drawn: false,
             last: 0, timer: null, url: null, failed: false };
 
 function satLoadTex(url, cb) {
   var img = new Image();
   img.onload = function() {
     var c = document.createElement('canvas');
-    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    var sc = Math.min(1, SAT_TEX_MAXW / img.naturalWidth);       // v7.2.11: большие снимки уменьшаем
+    c.width = Math.round(img.naturalWidth * sc); c.height = Math.round(img.naturalHeight * sc);
     var cx = c.getContext('2d');
-    cx.drawImage(img, 0, 0);
+    cx.drawImage(img, 0, 0, c.width, c.height);
     var id = cx.getImageData(0, 0, c.width, c.height);
     cb({ w: c.width, h: c.height, d: id.data });
   };
@@ -42,6 +43,25 @@ function satEnsureTextures() {
       SAT.day = d; SAT.night = n;
       renderSatellite(true);
     });
+  });
+  return false;
+}
+
+/** v7.2.11: цветной снимок с облаками грузится только при включённом чекбоксе. */
+function satEnsureDayClouds() {
+  if (SAT.dayc) return true;
+  if (SAT.dayCLoading || SAT.dayCFailed) return false;
+  SAT.dayCLoading = true;
+  satLoadTex(SAT_DAYCLOUDS_URL, function(c) {
+    SAT.dayCLoading = false;
+    if (!c) {
+      SAT.dayCFailed = true;
+      state.showSatClouds = false;
+      var chk = document.getElementById('chk-sat-clouds');
+      if (chk) chk.checked = false;
+      if (typeof setStatus === 'function') setStatus(LANG[state.lang].errSatClouds);
+    } else SAT.dayc = c;
+    renderSatellite(true);
   });
   return false;
 }
@@ -83,20 +103,22 @@ function renderSatellite(force) {
   var R = k * Math.PI;
   var N = Math.max(200, Math.min(SAT_MAX_PX, Math.ceil(2 * R * Math.min(2, Math.max(1.5, window.devicePixelRatio || 1)))));
   var night = !!state.showSatNight;
+  var clouds = !!state.showSatClouds && satEnsureDayClouds();   // v7.2.11: true только когда снимок загружен
   /* v7.1.6: картинки зависят только от центра и размера, а не от времени.
      Ночная сторона — вторая картинка под маской из кругов (меняется каждый кадр,
      но это дешёвый SVG, а не перепроекция текстуры). */
-  var key = [state.lon, state.lat, Math.round(k * 10), Math.round(tr[0]), Math.round(tr[1]), N, night ? 1 : 0, state.projMode].join('|');
+  var key = [state.lon, state.lat, Math.round(k * 10), Math.round(tr[0]), Math.round(tr[1]), N, night ? 1 : 0, clouds ? 1 : 0, state.projMode].join('|');
   if (force || key !== SAT.key) {
     if (SAT.building === key) { satUpdateNightMask(); return; }
     SAT.key = key;
-    satBuildImages(layer, proj, k, tr, R, N, night, key);
+    satBuildImages(layer, proj, k, tr, R, N, night, key, clouds);
   }
   satUpdateNightMask();
 }
 
 /** Дорогая часть: перепроекция текстур в две картинки (день; ночь = тёмная суша + огни). */
-function satBuildImages(layer, proj, k, tr, R, N, night, key) {
+function satBuildImages(layer, proj, k, tr, R, N, night, key, clouds) {
+  var dayTex = clouds ? SAT.dayc : SAT.day;
   SAT.building = key;
   var D = 2 * R, s = D / N, x0 = tr[0] - R, y0 = tr[1] - R;
   var rot = d3.geoRotation(proj.rotate());
@@ -131,7 +153,7 @@ function satBuildImages(layer, proj, k, tr, R, N, night, key) {
         lam = Math.atan2(X * sc, rho * cc);
       }
       var ll = rot.invert([lam * DEG, phi * DEG]);
-      satSample(SAT.day, ll[0], ll[1], pd);
+      satSample(dayTex, ll[0], ll[1], pd);
       outD[o] = pd[0]; outD[o + 1] = pd[1]; outD[o + 2] = pd[2]; outD[o + 3] = 255;
       if (night) {
         satSample(SAT.night, ll[0], ll[1], pn);
